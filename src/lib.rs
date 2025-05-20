@@ -309,7 +309,7 @@ where
             y,
             width,
             height,
-        };
+        } + Vector::new(bounds.x, bounds.y);
 
         renderer.fill_quad(
             Quad {
