@@ -30,6 +30,7 @@ struct State {
     dragging: bool,
 }
 
+#[expect(missing_debug_implementations, clippy::struct_field_names)]
 pub struct Split<'a, Message, Theme = iced_widget::Theme, Renderer = iced_widget::Renderer>
 where
     Theme: rule::Catalog,
@@ -300,8 +301,8 @@ where
         let (offset, length) = style.fill_mode.fill(cross_direction);
 
         let (x, y, width, height) = match self.direction {
-            Direction::Horizontal => (0.0, layout + offset, length, style.width as f32),
-            Direction::Vertical => (layout + offset, 0.0, style.width as f32, length),
+            Direction::Horizontal => (0.0, layout + offset, length, f32::from(style.width)),
+            Direction::Vertical => (layout + offset, 0.0, f32::from(style.width), length),
         };
 
         let bounds = Rectangle {
