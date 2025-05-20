@@ -78,7 +78,7 @@ where
     }
 
     #[must_use]
-    pub fn separator_width(mut self, separator_width: f32) -> Self {
+    pub fn thickness(mut self, separator_width: f32) -> Self {
         self.thickness = separator_width;
         self
     }
@@ -217,7 +217,8 @@ where
                             Direction::Horizontal => y - bounds.y,
                             Direction::Vertical => x - bounds.x,
                         } - self.thickness / 2.0)
-                            .clamp(0.0, layout_direction);
+                            .max(0.0)
+                            .min(layout_direction - self.thickness);
 
                         let split_at = match self.strategy {
                             Strategy::Relative => {
