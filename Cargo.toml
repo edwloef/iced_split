@@ -5,7 +5,6 @@ edition = "2024"
 license = "MIT"
 
 [dependencies]
-iced_core = { git = "https://github.com/iced-rs/iced", branch = "master" }
 iced_widget = { git = "https://github.com/iced-rs/iced", branch = "master" }
 
 [lints.rust]

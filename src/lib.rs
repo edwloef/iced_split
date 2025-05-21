@@ -1,13 +1,15 @@
-use iced_core::{
-    Clipboard, Element, Event, Layout, Length, Point, Rectangle, Shell, Size, Vector, Widget,
-    border,
-    layout::{Limits, Node},
-    mouse::{self, Cursor, Interaction},
-    overlay,
-    renderer::{Quad, Style},
-    widget::{Operation, Tree, tree},
+use iced_widget::{
+    core::{
+        self, Clipboard, Element, Event, Layout, Length, Point, Rectangle, Shell, Size, Vector,
+        Widget, border,
+        layout::{Limits, Node},
+        mouse::{self, Cursor, Interaction},
+        overlay,
+        renderer::{Quad, Style},
+        widget::{Operation, Tree, tree},
+    },
+    rule,
 };
-use iced_widget::rule;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub enum Strategy {
@@ -50,13 +52,13 @@ where
 {
     #[must_use]
     pub fn new(
-        left: impl Into<Element<'a, Message, Theme, Renderer>>,
-        right: impl Into<Element<'a, Message, Theme, Renderer>>,
+        start: impl Into<Element<'a, Message, Theme, Renderer>>,
+        end: impl Into<Element<'a, Message, Theme, Renderer>>,
         split_at: f32,
         f: fn(f32) -> Message,
     ) -> Self {
         Self {
-            children: [left.into(), right.into()],
+            children: [start.into(), end.into()],
             split_at,
             strategy: Strategy::default(),
             direction: Direction::default(),
@@ -104,7 +106,7 @@ impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer>
     for Split<'_, Message, Theme, Renderer>
 where
     Theme: rule::Catalog,
-    Renderer: iced_core::Renderer,
+    Renderer: core::Renderer,
 {
     fn children(&self) -> Vec<Tree> {
         self.children.iter().map(Tree::new).collect()
@@ -396,7 +398,7 @@ impl<'a, Message, Theme, Renderer> From<Split<'a, Message, Theme, Renderer>>
 where
     Message: 'a,
     Theme: rule::Catalog + 'a,
-    Renderer: iced_core::Renderer + 'a,
+    Renderer: core::Renderer + 'a,
 {
     fn from(value: Split<'a, Message, Theme, Renderer>) -> Self {
         Self::new(value)
