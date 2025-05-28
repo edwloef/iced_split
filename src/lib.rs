@@ -471,7 +471,10 @@ where
 
         match event {
             Event::Mouse(event) => match event {
-                mouse::Event::ButtonPressed(mouse::Button::Left) if self.focused(state) => {
+                mouse::Event::ButtonPressed {
+                    button: mouse::Button::Left,
+                    ..
+                } if self.focused(state) => {
                     state.last_click = cursor.position().map(|position| {
                         Click::new(position, mouse::Button::Left, state.last_click)
                     });
@@ -525,7 +528,10 @@ where
                         }
                     }
                 }
-                mouse::Event::ButtonReleased(mouse::Button::Left) => match state.status {
+                mouse::Event::ButtonReleased {
+                    button: mouse::Button::Left,
+                    ..
+                } => match state.status {
                     Status::Dragging => {
                         if let Some(on_drag_end) = &self.on_drag_end {
                             shell.publish(on_drag_end());
@@ -659,8 +665,8 @@ where
 
         if self.focused(state) {
             match self.direction {
-                Direction::Horizontal => Interaction::ResizingVertically,
-                Direction::Vertical => Interaction::ResizingHorizontally,
+                Direction::Horizontal => Interaction::ResizingRow,
+                Direction::Vertical => Interaction::ResizingColumn,
             }
         } else {
             self.children
