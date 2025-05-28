@@ -368,7 +368,10 @@ where
 
         match event {
             Event::Mouse(event) => match event {
-                mouse::Event::ButtonPressed(mouse::Button::Left) if state.hovering => {
+                mouse::Event::ButtonPressed {
+                    button: mouse::Button::Left,
+                    ..
+                } if state.hovering => {
                     state.last_click = cursor.position().map(|position| {
                         Click::new(position, mouse::Button::Left, state.last_click)
                     });
@@ -417,7 +420,10 @@ where
                         shell.request_redraw();
                     }
                 }
-                mouse::Event::ButtonReleased(mouse::Button::Left) if state.dragging => {
+                mouse::Event::ButtonReleased {
+                    button: mouse::Button::Left,
+                    ..
+                } if state.dragging => {
                     if let Some(on_double_click) = &self.on_double_click
                         && let Some(click) = state.last_click
                         && click.kind() == Kind::Double
