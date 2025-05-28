@@ -43,7 +43,7 @@ where
     direction: Direction,
     thickness: f32,
     class: Theme::Class<'a>,
-    f: fn(f32) -> Message,
+    f: Box<dyn Fn(f32) -> Message + 'a>,
 }
 
 impl<'a, Message, Theme, Renderer> Split<'a, Message, Theme, Renderer>
@@ -55,7 +55,7 @@ where
         start: impl Into<Element<'a, Message, Theme, Renderer>>,
         end: impl Into<Element<'a, Message, Theme, Renderer>>,
         split_at: f32,
-        f: fn(f32) -> Message,
+        f: impl Fn(f32) -> Message + 'a,
     ) -> Self {
         Self {
             children: [start.into(), end.into()],
@@ -64,7 +64,7 @@ where
             direction: Direction::default(),
             thickness: 11.0,
             class: Theme::default(),
-            f,
+            f: Box::from(f),
         }
     }
 
@@ -300,11 +300,12 @@ where
             Strategy::End => layout_direction - self.split_at - self.thickness,
         } + self.thickness / 2.0;
 
+        let width = f32::from(style.width);
         let (offset, length) = style.fill_mode.fill(cross_direction);
 
         let (x, y, width, height) = match self.direction {
-            Direction::Horizontal => (0.0, layout + offset, length, f32::from(style.width)),
-            Direction::Vertical => (layout + offset, 0.0, f32::from(style.width), length),
+            Direction::Horizontal => (0.0, width.mul_add(-0.5, layout + offset), length, width),
+            Direction::Vertical => (width.mul_add(-0.5, layout + offset), 0.0, width, length),
         };
 
         let bounds = Rectangle {
