@@ -282,7 +282,10 @@ where
 
         if let Event::Mouse(event) = event {
             match event {
-                mouse::Event::ButtonPressed(mouse::Button::Left) if state.hovering => {
+                mouse::Event::ButtonPressed {
+                    button: mouse::Button::Left,
+                    ..
+                } if state.hovering => {
                     state.dragging = true;
                     shell.capture_event();
                 }
