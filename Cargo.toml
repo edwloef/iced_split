@@ -9,10 +9,7 @@ keywords = ["gui", "widget", "iced", "iced-rs"]
 categories = ["gui"]
 
 [dependencies]
-iced_core = "0.15.0-dev"
-
-[patch.crates-io]
-iced_core.git = "https://github.com/iced-rs/iced"
+iced_core = { git = "https://github.com/edwloef/iced", branch = "generic-daw" }
 
 [lints.rust]
 missing_copy_implementations = "warn"
