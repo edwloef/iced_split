@@ -5,7 +5,7 @@ edition = "2024"
 license = "MIT"
 
 [dependencies]
-iced_widget = { git = "https://github.com/iced-rs/iced", branch = "master" }
+iced_widget = { git = "https://github.com/edwloef/iced", branch = "generic-daw" }
 
 [lints.rust]
 missing_copy_implementations = "warn"
