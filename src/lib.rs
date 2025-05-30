@@ -319,6 +319,7 @@ where
             Quad {
                 bounds,
                 border: border::rounded(style.radius),
+                snap: style.snap,
                 ..Quad::default()
             },
             style.color,
