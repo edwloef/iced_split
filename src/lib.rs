@@ -48,7 +48,7 @@ where
 
 impl<'a, Message, Theme, Renderer> Split<'a, Message, Theme, Renderer>
 where
-    Theme: rule::Catalog + 'a,
+    Theme: rule::Catalog,
 {
     #[must_use]
     pub fn new(
