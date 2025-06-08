@@ -81,8 +81,8 @@ where
     }
 
     #[must_use]
-    pub fn thickness(mut self, separator_width: f32) -> Self {
-        self.thickness = separator_width;
+    pub fn thickness(mut self, thickness: f32) -> Self {
+        self.thickness = thickness;
         self
     }
 
