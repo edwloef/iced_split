@@ -140,7 +140,9 @@ where
             Strategy::Relative => layout_direction.mul_add(self.split_at, -self.thickness / 2.0),
             Strategy::Start => self.split_at,
             Strategy::End => layout_direction - self.split_at - self.thickness,
-        };
+        }
+        .min(layout_direction - self.thickness)
+        .max(0.0);
         let (start_width, start_height) = match self.direction {
             Direction::Horizontal => (cross_direction, start_layout),
             Direction::Vertical => (start_layout, cross_direction),
@@ -216,12 +218,10 @@ where
                     };
 
                     if state.dragging {
-                        let relative_position = (match self.direction {
+                        let relative_position = match self.direction {
                             Direction::Horizontal => y - bounds.y,
                             Direction::Vertical => x - bounds.x,
-                        } - self.thickness / 2.0)
-                            .max(0.0)
-                            .min(layout_direction - self.thickness);
+                        } - self.thickness / 2.0;
 
                         let split_at = match self.strategy {
                             Strategy::Relative => {
@@ -241,7 +241,9 @@ where
                         }
                         Strategy::Start => self.split_at,
                         Strategy::End => layout_direction - self.split_at - self.thickness,
-                    };
+                    }
+                    .min(layout_direction - self.thickness)
+                    .max(0.0);
 
                     let (x, y, width, height) = match self.direction {
                         Direction::Horizontal => (0.0, layout, cross_direction, self.thickness),
@@ -298,7 +300,10 @@ where
             Strategy::Relative => layout_direction.mul_add(self.split_at, -self.thickness / 2.0),
             Strategy::Start => self.split_at,
             Strategy::End => layout_direction - self.split_at - self.thickness,
-        } + self.thickness / 2.0;
+        }
+        .min(layout_direction - self.thickness)
+        .max(0.0)
+            + self.thickness / 2.0;
 
         let width = f32::from(style.width);
         let (offset, length) = style.fill_mode.fill(cross_direction);
