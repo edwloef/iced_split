@@ -41,7 +41,8 @@ where
     split_at: f32,
     strategy: Strategy,
     direction: Direction,
-    thickness: f32,
+    line_width: f32,
+    handle_width: f32,
     class: Theme::Class<'a>,
     f: Box<dyn Fn(f32) -> Message + 'a>,
 }
@@ -62,7 +63,8 @@ where
             split_at,
             strategy: Strategy::default(),
             direction: Direction::default(),
-            thickness: 11.0,
+            line_width: 1.0,
+            handle_width: 11.0,
             class: Theme::default(),
             f: Box::from(f),
         }
@@ -81,8 +83,16 @@ where
     }
 
     #[must_use]
-    pub fn thickness(mut self, thickness: f32) -> Self {
-        self.thickness = thickness;
+    pub fn line_width(mut self, line_width: f32) -> Self {
+        debug_assert!(self.handle_width >= line_width);
+        self.line_width = line_width;
+        self
+    }
+
+    #[must_use]
+    pub fn handle_width(mut self, handle_width: f32) -> Self {
+        debug_assert!(handle_width >= self.line_width);
+        self.handle_width = handle_width;
         self
     }
 
@@ -137,11 +147,11 @@ where
         };
 
         let start_layout = match self.strategy {
-            Strategy::Relative => layout_direction.mul_add(self.split_at, -self.thickness / 2.0),
+            Strategy::Relative => layout_direction.mul_add(self.split_at, -self.handle_width / 2.0),
             Strategy::Start => self.split_at,
-            Strategy::End => layout_direction - self.split_at - self.thickness,
+            Strategy::End => layout_direction - self.split_at - self.handle_width,
         }
-        .min(layout_direction - self.thickness)
+        .min(layout_direction - self.handle_width)
         .max(0.0);
         let (start_width, start_height) = match self.direction {
             Direction::Horizontal => (cross_direction, start_layout),
@@ -149,7 +159,7 @@ where
         };
         let start_limits = Limits::new(Size::new(0.0, 0.0), Size::new(start_width, start_height));
 
-        let end_layout = layout_direction - start_layout - self.thickness;
+        let end_layout = layout_direction - start_layout - self.handle_width;
         let (end_width, end_height) = match self.direction {
             Direction::Horizontal => (cross_direction, end_layout),
             Direction::Vertical => (end_layout, cross_direction),
@@ -157,8 +167,8 @@ where
         let end_limits = Limits::new(Size::new(0.0, 0.0), Size::new(end_width, end_height));
 
         let (offset_width, offset_height) = match self.direction {
-            Direction::Horizontal => (0.0, start_layout + self.thickness),
-            Direction::Vertical => (start_layout + self.thickness, 0.0),
+            Direction::Horizontal => (0.0, start_layout + self.handle_width),
+            Direction::Vertical => (start_layout + self.handle_width, 0.0),
         };
 
         let children = vec![
@@ -221,14 +231,16 @@ where
                         let relative_position = match self.direction {
                             Direction::Horizontal => y - bounds.y,
                             Direction::Vertical => x - bounds.x,
-                        } - self.thickness / 2.0;
+                        } - self.handle_width / 2.0;
 
                         let split_at = match self.strategy {
                             Strategy::Relative => {
-                                (relative_position + self.thickness / 2.0) / layout_direction
+                                (relative_position + self.handle_width / 2.0) / layout_direction
                             }
                             Strategy::Start => relative_position,
-                            Strategy::End => layout_direction - relative_position - self.thickness,
+                            Strategy::End => {
+                                layout_direction - relative_position - self.handle_width
+                            }
                         };
 
                         shell.publish((self.f)(split_at));
@@ -237,17 +249,17 @@ where
 
                     let layout = match self.strategy {
                         Strategy::Relative => {
-                            layout_direction.mul_add(self.split_at, -self.thickness / 2.0)
+                            layout_direction.mul_add(self.split_at, -self.handle_width / 2.0)
                         }
                         Strategy::Start => self.split_at,
-                        Strategy::End => layout_direction - self.split_at - self.thickness,
+                        Strategy::End => layout_direction - self.split_at - self.handle_width,
                     }
-                    .min(layout_direction - self.thickness)
+                    .min(layout_direction - self.handle_width)
                     .max(0.0);
 
                     let (x, y, width, height) = match self.direction {
-                        Direction::Horizontal => (0.0, layout, cross_direction, self.thickness),
-                        Direction::Vertical => (layout, 0.0, self.thickness, cross_direction),
+                        Direction::Horizontal => (0.0, layout, cross_direction, self.handle_width),
+                        Direction::Vertical => (layout, 0.0, self.handle_width, cross_direction),
                     };
 
                     let bounds = Rectangle {
@@ -297,20 +309,20 @@ where
         };
 
         let layout = match self.strategy {
-            Strategy::Relative => layout_direction.mul_add(self.split_at, -self.thickness / 2.0),
+            Strategy::Relative => layout_direction.mul_add(self.split_at, -self.handle_width / 2.0),
             Strategy::Start => self.split_at,
-            Strategy::End => layout_direction - self.split_at - self.thickness,
+            Strategy::End => layout_direction - self.split_at - self.handle_width,
         }
-        .min(layout_direction - self.thickness)
+        .min(layout_direction - self.handle_width)
         .max(0.0)
-            + self.thickness / 2.0;
+            + self.handle_width / 2.0;
 
-        let width = f32::from(style.width);
         let (offset, length) = style.fill_mode.fill(cross_direction);
+        let layout_pos = self.line_width.mul_add(-0.5, layout + offset);
 
         let (x, y, width, height) = match self.direction {
-            Direction::Horizontal => (0.0, width.mul_add(-0.5, layout + offset), length, width),
-            Direction::Vertical => (width.mul_add(-0.5, layout + offset), 0.0, width, length),
+            Direction::Horizontal => (0.0, layout_pos, length, self.line_width),
+            Direction::Vertical => (layout_pos, 0.0, self.line_width, length),
         };
 
         let bounds = Rectangle {
