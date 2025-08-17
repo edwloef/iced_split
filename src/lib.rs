@@ -11,19 +11,33 @@ use iced_widget::{
     rule,
 };
 
-#[derive(Clone, Copy, Debug, Default)]
-pub enum Strategy {
-    #[default]
-    Relative,
-    Start,
-    End,
-}
-
+/// How the split is oriented.
 #[derive(Clone, Copy, Debug, Default)]
 pub enum Direction {
+    /// The separator is a horizontal [`Rule`], separating a top and bottom widget.
+    ///
+    /// [`Rule`]: iced_widget::Rule
     Horizontal,
+    /// The separator is a vertical [`Rule`], separating a left and right widget. This is the
+    /// default.
+    ///
+    /// [`Rule`]: iced_widget::Rule
     #[default]
     Vertical,
+}
+
+/// What `split_at` represents. This becomes relevant when the widget is resized in the layout
+/// direction.
+#[derive(Clone, Copy, Debug, Default)]
+pub enum Strategy {
+    /// `split_at` is the portion of the entire split's width that the `start` widget takes up. This
+    /// is the default.
+    #[default]
+    Relative,
+    /// `split_at` is the width of the `start` widget in pixels.
+    Start,
+    /// `split_at` is the width of the `end` widget in pixels.
+    End,
 }
 
 #[derive(Default)]
@@ -32,6 +46,7 @@ struct State {
     dragging: bool,
 }
 
+/// Resizeable splits for [`iced`](https://github.com/iced-rs/iced).
 #[expect(missing_debug_implementations, clippy::struct_field_names)]
 pub struct Split<'a, Message, Theme = iced_widget::Theme, Renderer = iced_widget::Renderer>
 where
@@ -51,6 +66,8 @@ impl<'a, Message, Theme, Renderer> Split<'a, Message, Theme, Renderer>
 where
     Theme: rule::Catalog,
 {
+    /// Creates a new [`Split`] with the given `start` and `end` widgets, a split position, and a
+    /// function to emit messages when the split position changes.
     #[must_use]
     pub fn new(
         start: impl Into<Element<'a, Message, Theme, Renderer>>,
@@ -70,18 +87,24 @@ where
         }
     }
 
+    /// Sets the [`Direction`] of the [`Split`].
     #[must_use]
     pub fn direction(mut self, direction: Direction) -> Self {
         self.direction = direction;
         self
     }
 
+    /// Sets the [`Strategy`] of the [`Split`].
     #[must_use]
     pub fn strategy(mut self, strategy: Strategy) -> Self {
         self.strategy = strategy;
         self
     }
 
+    /// Sets the width of the [`Rule`] between the `start` and `end` widgets. This should be less
+    /// than or equal to the `handle_width`.
+    ///
+    /// [`Rule`]: iced_widget::Rule
     #[must_use]
     pub fn line_width(mut self, line_width: f32) -> Self {
         debug_assert!(self.handle_width >= line_width);
@@ -89,6 +112,10 @@ where
         self
     }
 
+    /// Sets the width of the [`Rule`]'s handle between the `start` and `end` widgets. This should
+    /// be greater than or equal to the `line_width`.
+    ///
+    /// [`Rule`]: iced_widget::Rule
     #[must_use]
     pub fn handle_width(mut self, handle_width: f32) -> Self {
         debug_assert!(handle_width >= self.line_width);
@@ -96,6 +123,10 @@ where
         self
     }
 
+    /// Sets the [`Style`] of the [`Rule`] between the `start` and `end` widgets.
+    ///
+    /// [`Style`]: iced_widget::rule::Style
+    /// [`Rule`]: iced_widget::Rule
     #[must_use]
     pub fn style(mut self, style: impl Fn(&Theme) -> rule::Style + 'a) -> Self
     where
@@ -105,6 +136,10 @@ where
         self
     }
 
+    /// Sets the [`Class`] of the [`Rule`] between the `start` and `end` widgets.
+    ///
+    /// [`Class`]: iced_widget::rule::Catalog::Class
+    /// [`Rule`]: iced_widget::Rule
     #[must_use]
     pub fn class(mut self, class: impl Into<Theme::Class<'a>>) -> Self {
         self.class = class.into();
