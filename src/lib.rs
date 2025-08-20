@@ -11,6 +11,34 @@ use iced_widget::{
     rule,
 };
 
+/// Creates a new [`horizontal`](Direction::Horizontal) [`Split`] with the given `top` and `bottom`
+/// widgets, a split position, and a function to emit messages when the split position changes.
+pub fn horizontal_split<'a, Message, Theme, Renderer>(
+    top: impl Into<Element<'a, Message, Theme, Renderer>>,
+    bottom: impl Into<Element<'a, Message, Theme, Renderer>>,
+    split_at: f32,
+    f: impl Fn(f32) -> Message + 'a,
+) -> Split<'a, Message, Theme, Renderer>
+where
+    Theme: rule::Catalog,
+{
+    Split::new(top, bottom, split_at, f).direction(Direction::Horizontal)
+}
+
+/// Creates a new [`vertical`](Direction::Vertical) [`Split`] with the given `left` and `right`
+/// widgets, a split position, and a function to emit messages when the split position changes.
+pub fn vertical_split<'a, Message, Theme, Renderer>(
+    left: impl Into<Element<'a, Message, Theme, Renderer>>,
+    right: impl Into<Element<'a, Message, Theme, Renderer>>,
+    split_at: f32,
+    f: impl Fn(f32) -> Message + 'a,
+) -> Split<'a, Message, Theme, Renderer>
+where
+    Theme: rule::Catalog,
+{
+    Split::new(left, right, split_at, f)
+}
+
 /// How the split is oriented.
 #[derive(Clone, Copy, Debug, Default)]
 pub enum Direction {
