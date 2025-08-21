@@ -197,11 +197,11 @@ where
         tree::State::new(State::default())
     }
 
-    fn diff(&self, tree: &mut Tree) {
-        tree.diff_children(&self.children);
+    fn diff(&mut self, tree: &mut Tree) {
+        tree.diff_children(&mut self.children);
     }
 
-    fn layout(&self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) -> Node {
+    fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) -> Node {
         let max_limits = limits.max();
 
         let (cross_direction, layout_direction) = match self.direction {
@@ -236,10 +236,10 @@ where
 
         let children = vec![
             self.children[0]
-                .as_widget()
+                .as_widget_mut()
                 .layout(&mut tree.children[0], renderer, &start_limits),
             self.children[1]
-                .as_widget()
+                .as_widget_mut()
                 .layout(&mut tree.children[1], renderer, &end_limits)
                 .translate(Vector::new(offset_width, offset_height)),
         ];
@@ -455,7 +455,7 @@ where
     }
 
     fn operate(
-        &self,
+        &mut self,
         tree: &mut Tree,
         layout: Layout<'_>,
         renderer: &Renderer,
@@ -463,12 +463,12 @@ where
     ) {
         operation.container(None, layout.bounds(), &mut |operation| {
             self.children
-                .iter()
+                .iter_mut()
                 .zip(&mut tree.children)
                 .zip(layout.children())
                 .for_each(|((child, state), layout)| {
                     child
-                        .as_widget()
+                        .as_widget_mut()
                         .operate(state, layout, renderer, operation);
                 });
         });
