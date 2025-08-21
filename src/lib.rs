@@ -388,12 +388,14 @@ where
             Direction::Vertical => (layout_pos, 0.0, self.line_width, length),
         };
 
+        let (x, y) = ((x + bounds.x).round(), (y + bounds.y).round());
+
         let bounds = Rectangle {
             x,
             y,
             width,
             height,
-        } + Vector::new(bounds.x, bounds.y);
+        };
 
         renderer.fill_quad(
             Quad {
