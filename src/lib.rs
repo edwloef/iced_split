@@ -54,6 +54,15 @@ pub enum Direction {
     Vertical,
 }
 
+impl Direction {
+    fn select<T>(self, x: T, y: T) -> (T, T) {
+        match self {
+            Self::Horizontal => (x, y),
+            Self::Vertical => (y, x),
+        }
+    }
+}
+
 /// What `split_at` represents. This becomes relevant when the widget is resized in the layout
 /// direction.
 #[derive(Clone, Copy, Debug, Default)]
@@ -173,6 +182,22 @@ where
         self.class = class.into();
         self
     }
+
+    fn layout_length(&self, layout_direction: f32) -> f32 {
+        self.relative_length(self.split_at, layout_direction)
+    }
+
+    fn relative_length(&self, relative_position: f32, layout_direction: f32) -> f32 {
+        match self.strategy {
+            Strategy::Relative => {
+                layout_direction.mul_add(relative_position, -self.handle_width / 2.0)
+            }
+            Strategy::Start => relative_position,
+            Strategy::End => layout_direction - relative_position - self.handle_width,
+        }
+        .min(layout_direction - self.handle_width)
+        .max(0.0)
+    }
 }
 
 impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer>
@@ -204,35 +229,19 @@ where
     fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) -> Node {
         let max_limits = limits.max();
 
-        let (cross_direction, layout_direction) = match self.direction {
-            Direction::Horizontal => (max_limits.width, max_limits.height),
-            Direction::Vertical => (max_limits.height, max_limits.width),
-        };
+        let (cross_direction, layout_direction) =
+            self.direction.select(max_limits.width, max_limits.height);
 
-        let start_layout = match self.strategy {
-            Strategy::Relative => layout_direction.mul_add(self.split_at, -self.handle_width / 2.0),
-            Strategy::Start => self.split_at,
-            Strategy::End => layout_direction - self.split_at - self.handle_width,
-        }
-        .min(layout_direction - self.handle_width)
-        .max(0.0);
-        let (start_width, start_height) = match self.direction {
-            Direction::Horizontal => (cross_direction, start_layout),
-            Direction::Vertical => (start_layout, cross_direction),
-        };
-        let start_limits = Limits::new(Size::new(0.0, 0.0), Size::new(start_width, start_height));
+        let start_layout = self.layout_length(layout_direction);
+        let (start_width, start_height) = self.direction.select(cross_direction, start_layout);
+        let start_limits = Limits::new(Size::ZERO, Size::new(start_width, start_height));
 
         let end_layout = layout_direction - start_layout - self.handle_width;
-        let (end_width, end_height) = match self.direction {
-            Direction::Horizontal => (cross_direction, end_layout),
-            Direction::Vertical => (end_layout, cross_direction),
-        };
-        let end_limits = Limits::new(Size::new(0.0, 0.0), Size::new(end_width, end_height));
+        let (end_width, end_height) = self.direction.select(cross_direction, end_layout);
+        let end_limits = Limits::new(Size::ZERO, Size::new(end_width, end_height));
 
-        let (offset_width, offset_height) = match self.direction {
-            Direction::Horizontal => (0.0, start_layout + self.handle_width),
-            Direction::Vertical => (start_layout + self.handle_width, 0.0),
-        };
+        let (offset_width, offset_height) =
+            self.direction.select(0.0, start_layout + self.handle_width);
 
         let children = vec![
             self.children[0]
@@ -285,54 +294,30 @@ where
                     position: Point { x, y },
                     ..
                 } => {
-                    let (cross_direction, layout_direction) = match self.direction {
-                        Direction::Horizontal => (bounds.width, bounds.height),
-                        Direction::Vertical => (bounds.height, bounds.width),
-                    };
+                    let (cross_direction, layout_direction) =
+                        self.direction.select(bounds.width, bounds.height);
 
                     if state.dragging {
-                        let relative_position = match self.direction {
-                            Direction::Horizontal => y - bounds.y,
-                            Direction::Vertical => x - bounds.x,
-                        } - self.handle_width / 2.0;
+                        let relative_position = self.direction.select(y - bounds.y, x - bounds.x).0
+                            - self.handle_width / 2.0;
 
-                        let split_at = match self.strategy {
-                            Strategy::Relative => {
-                                (relative_position + self.handle_width / 2.0) / layout_direction
-                            }
-                            Strategy::Start => relative_position,
-                            Strategy::End => {
-                                layout_direction - relative_position - self.handle_width
-                            }
-                        };
+                        let split_at = self.relative_length(relative_position, layout_direction);
 
                         shell.publish((self.f)(split_at));
                         shell.capture_event();
                     }
 
-                    let layout = match self.strategy {
-                        Strategy::Relative => {
-                            layout_direction.mul_add(self.split_at, -self.handle_width / 2.0)
-                        }
-                        Strategy::Start => self.split_at,
-                        Strategy::End => layout_direction - self.split_at - self.handle_width,
-                    }
-                    .min(layout_direction - self.handle_width)
-                    .max(0.0);
+                    let layout = self.layout_length(layout_direction);
+                    let (x, y) = self.direction.select(0.0, layout);
+                    let (x, y) = (x + bounds.x, y + bounds.y);
+                    let (width, height) = self.direction.select(cross_direction, self.handle_width);
 
-                    let (x, y, width, height) = match self.direction {
-                        Direction::Horizontal => (0.0, layout, cross_direction, self.handle_width),
-                        Direction::Vertical => (layout, 0.0, self.handle_width, cross_direction),
-                    };
-
-                    let bounds = Rectangle {
+                    state.hovering = cursor.is_over(Rectangle {
                         x,
                         y,
                         width,
                         height,
-                    } + Vector::new(bounds.x, bounds.y);
-
-                    state.hovering = cursor.is_over(bounds);
+                    });
                 }
                 mouse::Event::ButtonReleased(mouse::Button::Left) if state.dragging => {
                     state.dragging = false;
@@ -366,40 +351,25 @@ where
         let bounds = layout.bounds();
         let style = theme.style(&self.class);
 
-        let (cross_direction, layout_direction) = match self.direction {
-            Direction::Horizontal => (bounds.width, bounds.height),
-            Direction::Vertical => (bounds.height, bounds.width),
-        };
-
-        let layout = match self.strategy {
-            Strategy::Relative => layout_direction.mul_add(self.split_at, -self.handle_width / 2.0),
-            Strategy::Start => self.split_at,
-            Strategy::End => layout_direction - self.split_at - self.handle_width,
-        }
-        .min(layout_direction - self.handle_width)
-        .max(0.0)
-            + self.handle_width / 2.0;
+        let (cross_direction, layout_direction) =
+            self.direction.select(bounds.width, bounds.height);
 
         let (offset, length) = style.fill_mode.fill(cross_direction);
-        let layout_pos = self.line_width.mul_add(-0.5, layout + offset);
 
-        let (x, y, width, height) = match self.direction {
-            Direction::Horizontal => (0.0, layout_pos, length, self.line_width),
-            Direction::Vertical => (layout_pos, 0.0, self.line_width, length),
-        };
-
+        let layout = self.layout_length(layout_direction) + self.handle_width / 2.0;
+        let layout = self.line_width.mul_add(-0.5, layout + offset);
+        let (x, y) = self.direction.select(0.0, layout);
         let (x, y) = ((x + bounds.x).round(), (y + bounds.y).round());
-
-        let bounds = Rectangle {
-            x,
-            y,
-            width,
-            height,
-        };
+        let (width, height) = self.direction.select(length, self.line_width);
 
         renderer.fill_quad(
             Quad {
-                bounds,
+                bounds: Rectangle {
+                    x,
+                    y,
+                    width,
+                    height,
+                },
                 border: border::rounded(style.radius),
                 snap: style.snap,
                 ..Quad::default()
