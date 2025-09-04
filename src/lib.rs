@@ -183,10 +183,6 @@ where
         self
     }
 
-    fn layout_length(&self, layout_direction: f32) -> f32 {
-        self.relative_length(self.split_at, layout_direction)
-    }
-
     fn relative_length(&self, relative_position: f32, layout_direction: f32) -> f32 {
         match self.strategy {
             Strategy::Relative => {
@@ -232,7 +228,7 @@ where
         let (cross_direction, layout_direction) =
             self.direction.select(max_limits.width, max_limits.height);
 
-        let start_layout = self.layout_length(layout_direction);
+        let start_layout = self.relative_length(self.split_at, layout_direction);
         let (start_width, start_height) = self.direction.select(cross_direction, start_layout);
         let start_limits = Limits::new(Size::ZERO, Size::new(start_width, start_height));
 
@@ -307,7 +303,7 @@ where
                         shell.capture_event();
                     }
 
-                    let layout = self.layout_length(layout_direction);
+                    let layout = self.relative_length(self.split_at, layout_direction);
                     let (x, y) = self.direction.select(0.0, layout);
                     let (x, y) = (x + bounds.x, y + bounds.y);
                     let (width, height) = self.direction.select(cross_direction, self.handle_width);
@@ -356,8 +352,8 @@ where
 
         let (offset, length) = style.fill_mode.fill(cross_direction);
 
-        let layout = self.layout_length(layout_direction) + self.handle_width / 2.0;
-        let layout = self.line_width.mul_add(-0.5, layout + offset);
+        let layout = self.relative_length(self.split_at, layout_direction);
+        let layout = layout + offset + (self.handle_width - self.line_width) / 2.0;
         let (x, y) = self.direction.select(0.0, layout);
         let (x, y) = ((x + bounds.x).round(), (y + bounds.y).round());
         let (width, height) = self.direction.select(length, self.line_width);
