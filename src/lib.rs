@@ -212,6 +212,18 @@ where
         .min(layout_direction - self.handle_width)
         .max(0.0)
     }
+
+    fn relative_size(&self, relative_position: f32, layout_direction: f32) -> f32 {
+        match self.strategy {
+            Strategy::Relative => {
+                let relative_handle = relative_position + self.handle_width / 2.0;
+                relative_handle / layout_direction
+            }
+            _ => self.relative_length(relative_position, layout_direction),
+        }
+        .min(layout_direction - self.handle_width)
+        .max(0.0)
+    }
 }
 
 impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
@@ -319,7 +331,7 @@ where
                         let relative_position = self.direction.select(y - bounds.y, x - bounds.x).0
                             - self.handle_width / 2.0;
 
-                        let split_at = self.relative_length(relative_position, layout_direction);
+                        let split_at = self.relative_size(relative_position, layout_direction);
 
                         shell.publish((self.on_drag)(split_at));
                         shell.capture_event();
