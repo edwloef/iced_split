@@ -3,7 +3,7 @@ use iced_widget::{
         self, Clipboard, Element, Event, Layout, Length, Point, Rectangle, Shell, Size, Vector,
         Widget, border,
         layout::{Limits, Node},
-        mouse::{self, Cursor, Interaction},
+        mouse::{self, Click, Cursor, Interaction, click::Kind},
         overlay,
         renderer::{Quad, Style},
         widget::{Operation, Tree, tree},
@@ -20,7 +20,9 @@ pub fn horizontal_split<'a, Message, Theme, Renderer>(
     f: impl Fn(f32) -> Message + 'a,
 ) -> Split<'a, Message, Theme, Renderer>
 where
-    Theme: rule::Catalog,
+    Message: Clone + 'a,
+    Theme: rule::Catalog + 'a,
+    Renderer: core::Renderer + 'a,
 {
     Split::new(top, bottom, split_at, f).direction(Direction::Horizontal)
 }
@@ -34,7 +36,9 @@ pub fn vertical_split<'a, Message, Theme, Renderer>(
     f: impl Fn(f32) -> Message + 'a,
 ) -> Split<'a, Message, Theme, Renderer>
 where
-    Theme: rule::Catalog,
+    Message: Clone + 'a,
+    Theme: rule::Catalog + 'a,
+    Renderer: core::Renderer + 'a,
 {
     Split::new(left, right, split_at, f)
 }
@@ -81,13 +85,16 @@ pub enum Strategy {
 struct State {
     hovering: bool,
     dragging: bool,
+    last_click: Option<Click>,
 }
 
 /// Resizeable splits for [`iced`](https://github.com/iced-rs/iced).
 #[expect(missing_debug_implementations, clippy::struct_field_names)]
-pub struct Split<'a, Message, Theme = iced_widget::Theme, Renderer = iced_widget::Renderer>
+pub struct Split<'a, Message, Theme, Renderer>
 where
-    Theme: rule::Catalog,
+    Message: Clone + 'a,
+    Theme: rule::Catalog + 'a,
+    Renderer: core::Renderer + 'a,
 {
     children: [Element<'a, Message, Theme, Renderer>; 2],
     split_at: f32,
@@ -96,21 +103,24 @@ where
     line_width: f32,
     handle_width: f32,
     class: Theme::Class<'a>,
-    f: Box<dyn Fn(f32) -> Message + 'a>,
+    on_drag: Box<dyn Fn(f32) -> Message + 'a>,
+    on_double_click: Option<Message>,
 }
 
 impl<'a, Message, Theme, Renderer> Split<'a, Message, Theme, Renderer>
 where
-    Theme: rule::Catalog,
+    Message: Clone + 'a,
+    Theme: rule::Catalog + 'a,
+    Renderer: core::Renderer + 'a,
 {
     /// Creates a new [`Split`] with the given `start` and `end` widgets, a split position, and a
-    /// function to emit messages when the split position changes.
+    /// function to emit messages when the split is dragged.
     #[must_use]
     pub fn new(
         start: impl Into<Element<'a, Message, Theme, Renderer>>,
         end: impl Into<Element<'a, Message, Theme, Renderer>>,
         split_at: f32,
-        f: impl Fn(f32) -> Message + 'a,
+        on_drag: impl Fn(f32) -> Message + 'a,
     ) -> Self {
         Self {
             children: [start.into(), end.into()],
@@ -120,7 +130,8 @@ where
             line_width: 1.0,
             handle_width: 11.0,
             class: Theme::default(),
-            f: Box::from(f),
+            on_drag: Box::from(on_drag),
+            on_double_click: None,
         }
     }
 
@@ -135,6 +146,13 @@ where
     #[must_use]
     pub fn strategy(mut self, strategy: Strategy) -> Self {
         self.strategy = strategy;
+        self
+    }
+
+    /// Sets the message emitted when the split is double-clicked.
+    #[must_use]
+    pub fn on_double_click(mut self, on_double_click: Message) -> Self {
+        self.on_double_click = Some(on_double_click);
         self
     }
 
@@ -196,11 +214,12 @@ where
     }
 }
 
-impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer>
-    for Split<'_, Message, Theme, Renderer>
+impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
+    for Split<'a, Message, Theme, Renderer>
 where
-    Theme: rule::Catalog,
-    Renderer: core::Renderer,
+    Message: Clone + 'a,
+    Theme: rule::Catalog + 'a,
+    Renderer: core::Renderer + 'a,
 {
     fn children(&self) -> Vec<Tree> {
         self.children.iter().map(Tree::new).collect()
@@ -283,6 +302,9 @@ where
         if let Event::Mouse(event) = event {
             match event {
                 mouse::Event::ButtonPressed(mouse::Button::Left) if state.hovering => {
+                    state.last_click = cursor.position().map(|position| {
+                        Click::new(position, mouse::Button::Left, state.last_click)
+                    });
                     state.dragging = true;
                     shell.capture_event();
                 }
@@ -299,7 +321,7 @@ where
 
                         let split_at = self.relative_length(relative_position, layout_direction);
 
-                        shell.publish((self.f)(split_at));
+                        shell.publish((self.on_drag)(split_at));
                         shell.capture_event();
                     }
 
@@ -316,6 +338,14 @@ where
                     });
                 }
                 mouse::Event::ButtonReleased(mouse::Button::Left) if state.dragging => {
+                    if let Some(on_double_click) = &self.on_double_click
+                        && let Some(click) = state.last_click
+                        && click.kind() == Kind::Double
+                        && cursor.is_over(layout.bounds())
+                    {
+                        shell.publish(on_double_click.clone());
+                    }
+
                     state.dragging = false;
                     shell.capture_event();
                 }
@@ -404,14 +434,14 @@ where
         }
     }
 
-    fn overlay<'a>(
-        &'a mut self,
-        tree: &'a mut Tree,
-        layout: Layout<'a>,
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
         renderer: &Renderer,
         viewport: &Rectangle,
         translation: Vector,
-    ) -> Option<overlay::Element<'a, Message, Theme, Renderer>> {
+    ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
         overlay::from_children(
             &mut self.children,
             tree,
@@ -447,7 +477,7 @@ where
 impl<'a, Message, Theme, Renderer> From<Split<'a, Message, Theme, Renderer>>
     for Element<'a, Message, Theme, Renderer>
 where
-    Message: 'a,
+    Message: Clone + 'a,
     Theme: rule::Catalog + 'a,
     Renderer: core::Renderer + 'a,
 {
