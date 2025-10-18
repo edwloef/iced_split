@@ -135,8 +135,7 @@ where
     Theme: Catalog + 'a,
     Renderer: iced_core::Renderer + 'a,
 {
-    /// Creates a new [`Split`] with the given `start` and `end` widgets, a split position, and a
-    /// function to emit messages when the [`Split`] is dragged.
+    /// Creates a new [`Split`] with the given `start` and `end` widgets and a split position.
     #[must_use]
     pub fn new(
         start: impl Into<Element<'a, Message, Theme, Renderer>>,
@@ -171,20 +170,6 @@ where
         self
     }
 
-    /// Sets the [`Direction`] of the [`Split`].
-    #[must_use]
-    pub fn direction(mut self, direction: Direction) -> Self {
-        self.direction = direction;
-        self
-    }
-
-    /// Sets the [`Strategy`] of the [`Split`].
-    #[must_use]
-    pub fn strategy(mut self, strategy: Strategy) -> Self {
-        self.strategy = strategy;
-        self
-    }
-
     /// Sets the message emitted when the [`Split`] is double-clicked.
     #[must_use]
     pub fn on_double_click(mut self, on_double_click: Message) -> Self
@@ -206,15 +191,14 @@ where
         self
     }
 
-    /// Sets the function that produces the message emitted when the [`Split`] is double-clicked.
+    /// Sets the function to emit messages when the [`Split`] is double-clicked.
     #[must_use]
     pub fn on_double_click_with(mut self, on_double_click_with: impl Fn() -> Message + 'a) -> Self {
         self.on_double_click = Some(Box::from(on_double_click_with));
         self
     }
 
-    /// Sets the function that produces the message emitted when the [`Split`] is double-clicked, if
-    /// `Some`.
+    /// Sets the function to emit messages when the [`Split`] is double-clicked, if `Some`.
     #[must_use]
     pub fn on_double_click_with_maybe(
         mut self,
@@ -222,6 +206,20 @@ where
     ) -> Self {
         self.on_double_click = on_double_click_with_maybe
             .map(|on_double_click_with| Box::from(on_double_click_with) as Box<_>);
+        self
+    }
+
+    /// Sets the [`Direction`] of the [`Split`].
+    #[must_use]
+    pub fn direction(mut self, direction: Direction) -> Self {
+        self.direction = direction;
+        self
+    }
+
+    /// Sets the [`Strategy`] of the [`Split`].
+    #[must_use]
+    pub fn strategy(mut self, strategy: Strategy) -> Self {
+        self.strategy = strategy;
         self
     }
 
