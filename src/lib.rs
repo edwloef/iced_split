@@ -17,14 +17,16 @@ pub fn horizontal_split<'a, Message, Theme, Renderer>(
     top: impl Into<Element<'a, Message, Theme, Renderer>>,
     bottom: impl Into<Element<'a, Message, Theme, Renderer>>,
     split_at: f32,
-    f: impl Fn(f32) -> Message + 'a,
+    on_drag: impl Fn(f32) -> Message + 'a,
 ) -> Split<'a, Message, Theme, Renderer>
 where
-    Message: Clone + 'a,
+    Message: 'a,
     Theme: Catalog + 'a,
     Renderer: iced_core::Renderer + 'a,
 {
-    Split::new(top, bottom, split_at, f).direction(Direction::Horizontal)
+    Split::new(top, bottom, split_at)
+        .direction(Direction::Horizontal)
+        .on_drag(on_drag)
 }
 
 /// Creates a new [`vertical`](Direction::Vertical) [`Split`] with the given `left` and `right`
@@ -33,14 +35,14 @@ pub fn vertical_split<'a, Message, Theme, Renderer>(
     left: impl Into<Element<'a, Message, Theme, Renderer>>,
     right: impl Into<Element<'a, Message, Theme, Renderer>>,
     split_at: f32,
-    f: impl Fn(f32) -> Message + 'a,
+    on_drag: impl Fn(f32) -> Message + 'a,
 ) -> Split<'a, Message, Theme, Renderer>
 where
-    Message: Clone + 'a,
+    Message: 'a,
     Theme: Catalog + 'a,
     Renderer: iced_core::Renderer + 'a,
 {
-    Split::new(left, right, split_at, f)
+    Split::new(left, right, split_at).on_drag(on_drag)
 }
 
 /// How the [`Split`] is oriented.
@@ -81,7 +83,6 @@ struct State {
     hovering: bool,
     dragging: bool,
     last_click: Option<Click>,
-    update_mix: bool,
     mix: Animation<bool>,
     now: Instant,
     duration: Duration,
@@ -94,7 +95,6 @@ impl State {
             hovering: false,
             dragging: false,
             last_click: None,
-            update_mix: false,
             mix: Animation::new(false).duration(duration).delay(delay),
             now: Instant::now(),
             duration,
@@ -113,7 +113,7 @@ impl State {
 #[expect(missing_debug_implementations, clippy::struct_field_names)]
 pub struct Split<'a, Message, Theme, Renderer>
 where
-    Message: Clone + 'a,
+    Message: 'a,
     Theme: Catalog + 'a,
     Renderer: iced_core::Renderer + 'a,
 {
@@ -125,13 +125,13 @@ where
     duration: Duration,
     delay: Duration,
     class: Theme::Class<'a>,
-    on_drag: Box<dyn Fn(f32) -> Message + 'a>,
-    on_double_click: Option<Message>,
+    on_drag: Option<Box<dyn Fn(f32) -> Message + 'a>>,
+    on_double_click: Option<Box<dyn Fn() -> Message + 'a>>,
 }
 
 impl<'a, Message, Theme, Renderer> Split<'a, Message, Theme, Renderer>
 where
-    Message: Clone + 'a,
+    Message: 'a,
     Theme: Catalog + 'a,
     Renderer: iced_core::Renderer + 'a,
 {
@@ -142,7 +142,6 @@ where
         start: impl Into<Element<'a, Message, Theme, Renderer>>,
         end: impl Into<Element<'a, Message, Theme, Renderer>>,
         split_at: f32,
-        on_drag: impl Fn(f32) -> Message + 'a,
     ) -> Self {
         Self {
             children: [start.into(), end.into()],
@@ -153,9 +152,23 @@ where
             duration: Duration::from_millis(100),
             delay: Duration::from_millis(100),
             class: Theme::default(),
-            on_drag: Box::from(on_drag),
+            on_drag: None,
             on_double_click: None,
         }
+    }
+
+    /// Sets the function to emit messages when the [`Split`] is dragged.
+    #[must_use]
+    pub fn on_drag(mut self, on_drag: impl Fn(f32) -> Message + 'a) -> Self {
+        self.on_drag = Some(Box::from(on_drag));
+        self
+    }
+
+    /// Sets the function to emit messages when the [`Split`] is dragged, if `Some`.
+    #[must_use]
+    pub fn on_drag_maybe(mut self, on_drag_maybe: Option<impl Fn(f32) -> Message + 'a>) -> Self {
+        self.on_drag = on_drag_maybe.map(|on_drag| Box::from(on_drag) as Box<_>);
+        self
     }
 
     /// Sets the [`Direction`] of the [`Split`].
@@ -174,8 +187,41 @@ where
 
     /// Sets the message emitted when the [`Split`] is double-clicked.
     #[must_use]
-    pub fn on_double_click(mut self, on_double_click: Message) -> Self {
-        self.on_double_click = Some(on_double_click);
+    pub fn on_double_click(mut self, on_double_click: Message) -> Self
+    where
+        Message: Clone,
+    {
+        self.on_double_click = Some(Box::from(move || on_double_click.clone()));
+        self
+    }
+
+    /// Sets the message emitted when the [`Split`] is double-clicked, if `Some`.
+    #[must_use]
+    pub fn on_double_click_maybe(mut self, on_double_click_maybe: Option<Message>) -> Self
+    where
+        Message: Clone,
+    {
+        self.on_double_click = on_double_click_maybe
+            .map(|on_double_click| Box::from(move || on_double_click.clone()) as Box<_>);
+        self
+    }
+
+    /// Sets the function that produces the message emitted when the [`Split`] is double-clicked.
+    #[must_use]
+    pub fn on_double_click_with(mut self, on_double_click_with: impl Fn() -> Message + 'a) -> Self {
+        self.on_double_click = Some(Box::from(on_double_click_with));
+        self
+    }
+
+    /// Sets the function that produces the message emitted when the [`Split`] is double-clicked, if
+    /// `Some`.
+    #[must_use]
+    pub fn on_double_click_with_maybe(
+        mut self,
+        on_double_click_with_maybe: Option<impl Fn() -> Message + 'a>,
+    ) -> Self {
+        self.on_double_click = on_double_click_with_maybe
+            .map(|on_double_click_with| Box::from(on_double_click_with) as Box<_>);
         self
     }
 
@@ -217,6 +263,11 @@ where
         self
     }
 
+    fn focused(&self, state: &State) -> bool {
+        (self.on_drag.is_some() || self.on_double_click.is_some())
+            && (state.hovering || state.dragging)
+    }
+
     fn start_layout(&self, layout_direction: f32) -> f32 {
         match self.strategy {
             Strategy::Relative => layout_direction * self.split_at,
@@ -231,7 +282,7 @@ where
 impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
     for Split<'a, Message, Theme, Renderer>
 where
-    Message: Clone + 'a,
+    Message: 'a,
     Theme: Catalog + 'a,
     Renderer: iced_core::Renderer + 'a,
 {
@@ -334,7 +385,9 @@ where
                     let (cross_direction, layout_direction) =
                         self.direction.select(bounds.width, bounds.height);
 
-                    if state.dragging {
+                    if let Some(on_drag) = &self.on_drag
+                        && state.dragging
+                    {
                         let layout = self.direction.select(y - bounds.y, x - bounds.x).0
                             - self.handle_width / 2.0;
 
@@ -344,7 +397,7 @@ where
                             Strategy::End => layout_direction - layout - self.handle_width,
                         };
 
-                        shell.publish((self.on_drag)(split_at));
+                        shell.publish(on_drag(split_at));
                         shell.capture_event();
                     }
 
@@ -353,20 +406,17 @@ where
                     let (x, y) = (x + bounds.x, y + bounds.y);
                     let (width, height) = self.direction.select(cross_direction, self.handle_width);
 
-                    let hovering = cursor.is_over(Rectangle {
+                    let focused = self.focused(state);
+
+                    state.hovering = cursor.is_over(Rectangle {
                         x,
                         y,
                         width,
                         height,
                     });
 
-                    if hovering != state.hovering {
-                        state.hovering = hovering;
-
-                        if !state.dragging {
-                            state.update_mix = true;
-                            shell.request_redraw();
-                        }
+                    if self.focused(state) != focused {
+                        shell.request_redraw();
                     }
                 }
                 mouse::Event::ButtonReleased(mouse::Button::Left) if state.dragging => {
@@ -375,14 +425,15 @@ where
                         && click.kind() == Kind::Double
                         && cursor.is_over(layout.bounds())
                     {
-                        shell.publish(on_double_click.clone());
+                        shell.publish(on_double_click());
                     }
+
+                    let focused = self.focused(state);
 
                     state.dragging = false;
                     shell.capture_event();
 
-                    if !state.hovering {
-                        state.update_mix = true;
+                    if self.focused(state) != focused {
                         shell.request_redraw();
                     }
                 }
@@ -391,13 +442,7 @@ where
             Event::Window(window::Event::RedrawRequested(now)) => {
                 state.now = *now;
 
-                if state.update_mix {
-                    state.update_mix = false;
-                    state
-                        .mix
-                        .go_mut(state.hovering || state.dragging, state.now);
-                }
-
+                state.mix.go_mut(self.focused(state), state.now);
                 if state.mix.is_animating(state.now) {
                     shell.request_redraw();
                 }
@@ -498,7 +543,7 @@ where
     ) -> Interaction {
         let state = tree.state.downcast_ref::<State>();
 
-        if state.hovering || state.dragging {
+        if self.focused(state) {
             match self.direction {
                 Direction::Horizontal => Interaction::ResizingVertically,
                 Direction::Vertical => Interaction::ResizingHorizontally,
@@ -561,7 +606,7 @@ where
 impl<'a, Message, Theme, Renderer> From<Split<'a, Message, Theme, Renderer>>
     for Element<'a, Message, Theme, Renderer>
 where
-    Message: Clone + 'a,
+    Message: 'a,
     Theme: Catalog + 'a,
     Renderer: iced_core::Renderer + 'a,
 {
