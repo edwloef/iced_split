@@ -191,13 +191,13 @@ where
 
     /// Sets the message emitted when the [`Split`] starts getting dragged, if `Some`.
     #[must_use]
-    pub fn on_drag_start_maybe(mut self, on_drag_start_maybe: Option<Message>) -> Self
+    pub fn on_drag_start_maybe(self, on_drag_start_maybe: Option<Message>) -> Self
     where
         Message: Clone,
     {
-        self.on_drag_start =
-            on_drag_start_maybe.map(|on_drag_start| Box::from(move || on_drag_start.clone()) as _);
-        self
+        self.on_drag_start_with_maybe(
+            on_drag_start_maybe.map(|on_drag_start| move || on_drag_start.clone() as _),
+        )
     }
 
     /// Sets the function to emit messages when the [`Split`] starts getting dragged.
@@ -228,13 +228,13 @@ where
 
     /// Sets the message emitted when the [`Split`] finishes getting dragged, if `Some`.
     #[must_use]
-    pub fn on_drag_end_maybe(mut self, on_drag_end_maybe: Option<Message>) -> Self
+    pub fn on_drag_end_maybe(self, on_drag_end_maybe: Option<Message>) -> Self
     where
         Message: Clone,
     {
-        self.on_drag_end =
-            on_drag_end_maybe.map(|on_drag_end| Box::from(move || on_drag_end.clone()) as _);
-        self
+        self.on_drag_end_with_maybe(
+            on_drag_end_maybe.map(|on_drag_end| move || on_drag_end.clone()),
+        )
     }
 
     /// Sets the function to emit messages when the [`Split`] finishes getting dragged.
@@ -265,13 +265,13 @@ where
 
     /// Sets the message emitted when the [`Split`] is double-clicked, if `Some`.
     #[must_use]
-    pub fn on_double_click_maybe(mut self, on_double_click_maybe: Option<Message>) -> Self
+    pub fn on_double_click_maybe(self, on_double_click_maybe: Option<Message>) -> Self
     where
         Message: Clone,
     {
-        self.on_double_click = on_double_click_maybe
-            .map(|on_double_click| Box::from(move || on_double_click.clone()) as _);
-        self
+        self.on_double_click_with_maybe(
+            on_double_click_maybe.map(|on_double_click| move || on_double_click.clone()),
+        )
     }
 
     /// Sets the function to emit messages when the [`Split`] is double-clicked.
