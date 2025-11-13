@@ -12,7 +12,7 @@ use iced_core::{
 };
 
 /// Creates a new [`horizontal`](Direction::Horizontal) [`Split`] with the given `top` and `bottom`
-/// widgets, a split position, and a function to emit messages when the [`Split`] is dragged.
+/// widgets, a split position, and a function to emit messages when the [`Split`] gets dragged.
 pub fn horizontal_split<'a, Message, Theme, Renderer>(
     top: impl Into<Element<'a, Message, Theme, Renderer>>,
     bottom: impl Into<Element<'a, Message, Theme, Renderer>>,
@@ -30,7 +30,7 @@ where
 }
 
 /// Creates a new [`vertical`](Direction::Vertical) [`Split`] with the given `left` and `right`
-/// widgets, a split position, and a function to emit messages when the [`Split`] is dragged.
+/// widgets, a split position, and a function to emit messages when the [`Split`] gets dragged.
 pub fn vertical_split<'a, Message, Theme, Renderer>(
     left: impl Into<Element<'a, Message, Theme, Renderer>>,
     right: impl Into<Element<'a, Message, Theme, Renderer>>,
@@ -65,6 +65,15 @@ impl Direction {
     }
 }
 
+#[derive(PartialEq)]
+enum Status {
+    Dragging,
+    Grabbed,
+    DoubleClicked,
+    Hovering,
+    None,
+}
+
 /// What `split_at` represents. This affects how the [`Split`] behaves when resized in the layout
 /// direction.
 #[derive(Clone, Copy, Debug, Default)]
@@ -80,8 +89,7 @@ pub enum Strategy {
 }
 
 struct State {
-    hovering: bool,
-    dragging: bool,
+    status: Status,
     last_click: Option<Click>,
     mix: Animation<bool>,
     now: Instant,
@@ -92,8 +100,7 @@ struct State {
 impl State {
     fn new(duration: Duration, delay: Duration) -> Self {
         Self {
-            hovering: false,
-            dragging: false,
+            status: Status::None,
             last_click: None,
             mix: Animation::new(false).duration(duration).delay(delay),
             now: Instant::now(),
@@ -126,6 +133,8 @@ where
     delay: Duration,
     class: Theme::Class<'a>,
     on_drag: Option<Box<dyn Fn(f32) -> Message + 'a>>,
+    on_drag_start: Option<Box<dyn Fn() -> Message + 'a>>,
+    on_drag_end: Option<Box<dyn Fn() -> Message + 'a>>,
     on_double_click: Option<Box<dyn Fn() -> Message + 'a>>,
 }
 
@@ -152,32 +161,106 @@ where
             delay: Duration::from_millis(100),
             class: Theme::default(),
             on_drag: None,
+            on_drag_start: None,
+            on_drag_end: None,
             on_double_click: None,
         }
     }
 
-    /// Sets the function to emit messages when the [`Split`] is dragged.
+    /// Sets the function to emit messages when the [`Split`] gets dragged.
     #[must_use]
-    pub fn on_drag(mut self, on_drag: impl Fn(f32) -> Message + 'a) -> Self {
-        self.on_drag = Some(Box::from(on_drag));
+    pub fn on_drag(self, on_drag: impl Fn(f32) -> Message + 'a) -> Self {
+        self.on_drag_maybe(Some(on_drag))
+    }
+
+    /// Sets the function to emit messages when the [`Split`] gets dragged, if `Some`.
+    #[must_use]
+    pub fn on_drag_maybe(mut self, on_drag_maybe: Option<impl Fn(f32) -> Message + 'a>) -> Self {
+        self.on_drag = on_drag_maybe.map(|on_drag| Box::from(on_drag) as _);
         self
     }
 
-    /// Sets the function to emit messages when the [`Split`] is dragged, if `Some`.
+    /// Sets the message emitted when the [`Split`] starts getting dragged.
     #[must_use]
-    pub fn on_drag_maybe(mut self, on_drag_maybe: Option<impl Fn(f32) -> Message + 'a>) -> Self {
-        self.on_drag = on_drag_maybe.map(|on_drag| Box::from(on_drag) as Box<_>);
+    pub fn on_drag_start(self, on_drag_start: Message) -> Self
+    where
+        Message: Clone,
+    {
+        self.on_drag_start_maybe(Some(on_drag_start))
+    }
+
+    /// Sets the message emitted when the [`Split`] starts getting dragged, if `Some`.
+    #[must_use]
+    pub fn on_drag_start_maybe(mut self, on_drag_start_maybe: Option<Message>) -> Self
+    where
+        Message: Clone,
+    {
+        self.on_drag_start =
+            on_drag_start_maybe.map(|on_drag_start| Box::from(move || on_drag_start.clone()) as _);
+        self
+    }
+
+    /// Sets the function to emit messages when the [`Split`] starts getting dragged.
+    #[must_use]
+    pub fn on_drag_start_with(self, on_drag_start_with: impl Fn() -> Message + 'a) -> Self {
+        self.on_drag_start_with_maybe(Some(on_drag_start_with))
+    }
+
+    /// Sets the function to emit messages when the [`Split`] starts getting dragged, if `Some`.
+    #[must_use]
+    pub fn on_drag_start_with_maybe(
+        mut self,
+        on_drag_start_with_maybe: Option<impl Fn() -> Message + 'a>,
+    ) -> Self {
+        self.on_drag_start =
+            on_drag_start_with_maybe.map(|on_drag_start_with| Box::from(on_drag_start_with) as _);
+        self
+    }
+
+    /// Sets the message emitted when the [`Split`] finishes getting dragged.
+    #[must_use]
+    pub fn on_drag_end(self, on_drag_end: Message) -> Self
+    where
+        Message: Clone,
+    {
+        self.on_drag_end_maybe(Some(on_drag_end))
+    }
+
+    /// Sets the message emitted when the [`Split`] finishes getting dragged, if `Some`.
+    #[must_use]
+    pub fn on_drag_end_maybe(mut self, on_drag_end_maybe: Option<Message>) -> Self
+    where
+        Message: Clone,
+    {
+        self.on_drag_end =
+            on_drag_end_maybe.map(|on_drag_end| Box::from(move || on_drag_end.clone()) as _);
+        self
+    }
+
+    /// Sets the function to emit messages when the [`Split`] finishes getting dragged.
+    #[must_use]
+    pub fn on_drag_end_with(self, on_drag_end_with: impl Fn() -> Message + 'a) -> Self {
+        self.on_drag_end_with_maybe(Some(on_drag_end_with))
+    }
+
+    /// Sets the function to emit messages when the [`Split`] finishes getting dragged, if `Some`.
+    #[must_use]
+    pub fn on_drag_end_with_maybe(
+        mut self,
+        on_drag_end_with_maybe: Option<impl Fn() -> Message + 'a>,
+    ) -> Self {
+        self.on_drag_end =
+            on_drag_end_with_maybe.map(|on_drag_end_with| Box::from(on_drag_end_with) as _);
         self
     }
 
     /// Sets the message emitted when the [`Split`] is double-clicked.
     #[must_use]
-    pub fn on_double_click(mut self, on_double_click: Message) -> Self
+    pub fn on_double_click(self, on_double_click: Message) -> Self
     where
         Message: Clone,
     {
-        self.on_double_click = Some(Box::from(move || on_double_click.clone()));
-        self
+        self.on_double_click_maybe(Some(on_double_click))
     }
 
     /// Sets the message emitted when the [`Split`] is double-clicked, if `Some`.
@@ -187,15 +270,14 @@ where
         Message: Clone,
     {
         self.on_double_click = on_double_click_maybe
-            .map(|on_double_click| Box::from(move || on_double_click.clone()) as Box<_>);
+            .map(|on_double_click| Box::from(move || on_double_click.clone()) as _);
         self
     }
 
     /// Sets the function to emit messages when the [`Split`] is double-clicked.
     #[must_use]
-    pub fn on_double_click_with(mut self, on_double_click_with: impl Fn() -> Message + 'a) -> Self {
-        self.on_double_click = Some(Box::from(on_double_click_with));
-        self
+    pub fn on_double_click_with(self, on_double_click_with: impl Fn() -> Message + 'a) -> Self {
+        self.on_double_click_with_maybe(Some(on_double_click_with))
     }
 
     /// Sets the function to emit messages when the [`Split`] is double-clicked, if `Some`.
@@ -205,7 +287,7 @@ where
         on_double_click_with_maybe: Option<impl Fn() -> Message + 'a>,
     ) -> Self {
         self.on_double_click = on_double_click_with_maybe
-            .map(|on_double_click_with| Box::from(on_double_click_with) as Box<_>);
+            .map(|on_double_click_with| Box::from(on_double_click_with) as _);
         self
     }
 
@@ -261,9 +343,29 @@ where
         self
     }
 
+    fn hovering(&self, bounds: Rectangle, cursor: Cursor) -> Status {
+        let (cross_direction, layout_direction) =
+            self.direction.select(bounds.width, bounds.height);
+
+        let layout = self.start_layout(layout_direction);
+        let (x, y) = self.direction.select(0.0, layout);
+        let (x, y) = (x + bounds.x, y + bounds.y);
+        let (width, height) = self.direction.select(cross_direction, self.handle_width);
+
+        if cursor.is_over(Rectangle {
+            x,
+            y,
+            width,
+            height,
+        }) {
+            Status::Hovering
+        } else {
+            Status::None
+        }
+    }
+
     fn focused(&self, state: &State) -> bool {
-        (self.on_drag.is_some() || self.on_double_click.is_some())
-            && (state.hovering || state.dragging)
+        self.on_drag.is_some() && state.status != Status::None
     }
 
     fn start_layout(&self, layout_direction: f32) -> f32 {
@@ -368,24 +470,30 @@ where
 
         match event {
             Event::Mouse(event) => match event {
-                mouse::Event::ButtonPressed(mouse::Button::Left) if state.hovering => {
+                mouse::Event::ButtonPressed(mouse::Button::Left) if self.focused(state) => {
                     state.last_click = cursor.position().map(|position| {
                         Click::new(position, mouse::Button::Left, state.last_click)
                     });
 
-                    state.dragging = true;
+                    state.status = state
+                        .last_click
+                        .filter(|click| click.kind() == Kind::Double)
+                        .map_or(Status::Grabbed, |_| Status::DoubleClicked);
+
                     shell.capture_event();
                 }
                 mouse::Event::CursorMoved {
                     position: Point { x, y },
                     ..
                 } => {
-                    let (cross_direction, layout_direction) =
-                        self.direction.select(bounds.width, bounds.height);
-
                     if let Some(on_drag) = &self.on_drag
-                        && state.dragging
+                        && matches!(
+                            state.status,
+                            Status::Dragging | Status::Grabbed | Status::DoubleClicked
+                        )
                     {
+                        let layout_direction = self.direction.select(bounds.width, bounds.height).0;
+
                         let layout = self.direction.select(y - bounds.y, x - bounds.x).0
                             - self.handle_width / 2.0;
 
@@ -395,46 +503,53 @@ where
                             Strategy::End => layout_direction - layout - self.handle_width,
                         };
 
-                        shell.publish(on_drag(split_at));
-                        shell.capture_event();
-                    }
+                        if split_at != self.split_at {
+                            if state.status != Status::Dragging {
+                                state.status = Status::Dragging;
+                                if let Some(on_drag_start) = &self.on_drag_start {
+                                    shell.publish(on_drag_start());
+                                }
+                            }
 
-                    let layout = self.start_layout(layout_direction);
-                    let (x, y) = self.direction.select(0.0, layout);
-                    let (x, y) = (x + bounds.x, y + bounds.y);
-                    let (width, height) = self.direction.select(cross_direction, self.handle_width);
+                            shell.publish(on_drag(split_at));
+                            shell.capture_event();
+                        }
+                    } else {
+                        let focused = self.focused(state);
 
-                    let focused = self.focused(state);
+                        state.status = self.hovering(bounds, cursor);
 
-                    state.hovering = cursor.is_over(Rectangle {
-                        x,
-                        y,
-                        width,
-                        height,
-                    });
-
-                    if self.focused(state) != focused {
-                        shell.request_redraw();
-                    }
-                }
-                mouse::Event::ButtonReleased(mouse::Button::Left) if state.dragging => {
-                    if let Some(on_double_click) = &self.on_double_click
-                        && let Some(click) = state.last_click
-                        && click.kind() == Kind::Double
-                        && cursor.is_over(layout.bounds())
-                    {
-                        shell.publish(on_double_click());
-                    }
-
-                    let focused = self.focused(state);
-
-                    state.dragging = false;
-                    shell.capture_event();
-
-                    if self.focused(state) != focused {
-                        shell.request_redraw();
+                        if self.focused(state) != focused {
+                            shell.request_redraw();
+                        }
                     }
                 }
+                mouse::Event::ButtonReleased(mouse::Button::Left) => match state.status {
+                    Status::Dragging => {
+                        if let Some(on_drag_end) = &self.on_drag_end {
+                            shell.publish(on_drag_end());
+                            shell.capture_event();
+                        }
+
+                        let focused = self.focused(state);
+
+                        state.status = self.hovering(bounds, cursor);
+
+                        if self.focused(state) != focused {
+                            shell.request_redraw();
+                        }
+                    }
+                    Status::DoubleClicked => {
+                        if let Some(on_double_click) = &self.on_double_click {
+                            shell.publish(on_double_click());
+                            shell.capture_event();
+                        }
+
+                        state.status = Status::Hovering;
+                    }
+                    Status::Grabbed => state.status = Status::Hovering,
+                    _ => {}
+                },
                 _ => {}
             },
             Event::Window(window::Event::RedrawRequested(now)) => {
