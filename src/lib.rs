@@ -493,9 +493,9 @@ where
                             Status::Dragging | Status::Grabbed | Status::DoubleClicked
                         )
                     {
-                        let layout_direction = self.direction.select(bounds.width, bounds.height).0;
+                        let layout_direction = self.direction.select(bounds.width, bounds.height).1;
 
-                        let layout = self.direction.select(y - bounds.y, x - bounds.x).0
+                        let layout = self.direction.select(x - bounds.x, y - bounds.y).1
                             - self.handle_width / 2.0;
 
                         let split_at = match self.strategy {
