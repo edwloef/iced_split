@@ -197,7 +197,7 @@ where
         Message: Clone,
     {
         self.on_drag_start_with_maybe(
-            on_drag_start_maybe.map(|on_drag_start| move || on_drag_start.clone() as _),
+            on_drag_start_maybe.map(|on_drag_start| move || on_drag_start.clone()),
         )
     }
 
