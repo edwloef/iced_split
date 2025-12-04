@@ -462,15 +462,27 @@ where
                 );
             });
 
+        let state = tree.state.downcast_mut::<State>();
+
+        if let Event::Window(window::Event::RedrawRequested(now)) = event {
+            state.now = *now;
+
+            state.mix.go_mut(self.focused(state), state.now);
+            if state.mix.is_animating(state.now) {
+                shell.request_redraw();
+            }
+
+            return;
+        }
+
         if shell.is_event_captured() {
             return;
         }
 
-        let state = tree.state.downcast_mut::<State>();
         let bounds = layout.bounds();
 
-        match event {
-            Event::Mouse(event) => match event {
+        if let Event::Mouse(event) = event {
+            match event {
                 mouse::Event::ButtonPressed(mouse::Button::Left) if self.focused(state) => {
                     state.last_click = cursor.position().map(|position| {
                         Click::new(position, mouse::Button::Left, state.last_click)
@@ -552,16 +564,7 @@ where
                     _ => {}
                 },
                 _ => {}
-            },
-            Event::Window(window::Event::RedrawRequested(now)) => {
-                state.now = *now;
-
-                state.mix.go_mut(self.focused(state), state.now);
-                if state.mix.is_animating(state.now) {
-                    shell.request_redraw();
-                }
             }
-            _ => {}
         }
     }
 
