@@ -662,8 +662,8 @@ where
 
         if self.focused(state) {
             match self.direction {
-                Direction::Horizontal => Interaction::ResizingVertically,
-                Direction::Vertical => Interaction::ResizingHorizontally,
+                Direction::Horizontal => Interaction::ResizingRow,
+                Direction::Vertical => Interaction::ResizingColumn,
             }
         } else {
             self.children
