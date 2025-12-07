@@ -15,7 +15,7 @@ use iced_core::{
 };
 
 /// Creates a new [`horizontal`](Direction::Horizontal) [`Split`] with the given `top` and `bottom`
-/// widgets, a split position, and a function to emit messages when the [`Split`] gets dragged.
+/// widgets, a split position, and a function to emit messages when the split gets dragged.
 pub fn horizontal_split<'a, Message, Theme, Renderer>(
     top: impl Into<Element<'a, Message, Theme, Renderer>>,
     bottom: impl Into<Element<'a, Message, Theme, Renderer>>,
@@ -33,7 +33,7 @@ where
 }
 
 /// Creates a new [`vertical`](Direction::Vertical) [`Split`] with the given `left` and `right`
-/// widgets, a split position, and a function to emit messages when the [`Split`] gets dragged.
+/// widgets, a split position, and a function to emit messages when the split gets dragged.
 pub fn vertical_split<'a, Message, Theme, Renderer>(
     left: impl Into<Element<'a, Message, Theme, Renderer>>,
     right: impl Into<Element<'a, Message, Theme, Renderer>>,
@@ -68,36 +68,17 @@ impl Direction {
     }
 }
 
-#[derive(PartialEq)]
-enum Status {
-    Dragging,
-    Grabbed,
-    DoubleClicked,
-    Hovering,
-    None,
-}
-
-/// What `split_at` represents. This affects how the [`Split`] behaves when resized in the layout
-/// direction.
+/// How the [`Split`] behaves when dragged or resized.
 #[derive(Clone, Copy, Debug, Default)]
 pub enum Strategy {
-    /// `split_at` is the portion of the entire [`Split`]'s width that the `start` widget takes up.
-    /// This is the default.
+    /// `split_at` is the position of the [`Split`]'s separator relative to its width. This is the
+    /// default.
     #[default]
     Relative,
     /// `split_at` is the width of the `start` widget in pixels.
     Start,
     /// `split_at` is the width of the `end` widget in pixels.
     End,
-}
-
-struct State {
-    status: Status,
-    last_click: Option<Click>,
-    mix: Animation<bool>,
-    now: Instant,
-    duration: Duration,
-    delay: Duration,
 }
 
 impl State {
@@ -119,7 +100,7 @@ impl State {
     }
 }
 
-/// Resizeable splits for [`iced`](https://github.com/iced-rs/iced).
+/// Resizeable splits for `iced`.
 #[expect(missing_debug_implementations, clippy::struct_field_names)]
 pub struct Split<'a, Message, Theme, Renderer>
 where
@@ -308,28 +289,28 @@ where
         self
     }
 
-    /// Sets the width of the [`Split`] between the `start` and `end` widgets.
+    /// Sets the width of the [`Split`]'s separator.
     #[must_use]
     pub fn handle_width(mut self, handle_width: f32) -> Self {
         self.handle_width = handle_width;
         self
     }
 
-    /// Sets the duration of the focus and unfocus transitions.
+    /// Sets the duration of the [`Split`]'s focus and unfocus transitions.
     #[must_use]
     pub fn focus_duration(mut self, duration: Duration) -> Self {
         self.duration = duration;
         self
     }
 
-    /// Sets the delay of the focus and unfocus transitions.
+    /// Sets the delay of the [`Split`]'s focus and unfocus transitions.
     #[must_use]
     pub fn focus_delay(mut self, delay: Duration) -> Self {
         self.delay = delay;
         self
     }
 
-    /// Sets the [`Style`] of the [`Split`] between the `start` and `end` widgets.
+    /// Sets the [`Style`] of the [`Split`].
     #[must_use]
     pub fn style(mut self, style: impl Fn(&Theme) -> Style + 'a) -> Self
     where
@@ -339,7 +320,7 @@ where
         self
     }
 
-    /// Sets the [`Class`](Catalog::Class) of the [`Split`] between the `start` and `end` widgets.
+    /// Sets the [`Class`](Catalog::Class) of the [`Split`].
     #[must_use]
     pub fn class(mut self, class: impl Into<Theme::Class<'a>>) -> Self {
         self.class = class.into();
@@ -373,13 +354,31 @@ where
 
     fn start_layout(&self, layout_direction: f32) -> f32 {
         match self.strategy {
-            Strategy::Relative => layout_direction * self.split_at,
+            Strategy::Relative => layout_direction.mul_add(self.split_at, -self.handle_width / 2.0),
             Strategy::Start => self.split_at,
             Strategy::End => layout_direction - self.split_at - self.handle_width,
         }
         .min(layout_direction - self.handle_width)
         .max(0.0)
     }
+}
+
+struct State {
+    status: Status,
+    last_click: Option<Click>,
+    mix: Animation<bool>,
+    now: Instant,
+    duration: Duration,
+    delay: Duration,
+}
+
+#[derive(PartialEq)]
+enum Status {
+    Dragging,
+    Grabbed,
+    DoubleClicked,
+    Hovering,
+    None,
 }
 
 impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
@@ -509,13 +508,12 @@ where
                     {
                         let layout_direction = self.direction.select(bounds.width, bounds.height).1;
 
-                        let layout = self.direction.select(x - bounds.x, y - bounds.y).1
-                            - self.handle_width / 2.0;
+                        let layout = self.direction.select(x - bounds.x, y - bounds.y).1;
 
                         let split_at = match self.strategy {
                             Strategy::Relative => layout / layout_direction,
-                            Strategy::Start => layout,
-                            Strategy::End => layout_direction - layout - self.handle_width,
+                            Strategy::Start => layout - self.handle_width / 2.0,
+                            Strategy::End => layout_direction - layout - self.handle_width / 2.0,
                         };
 
                         if split_at != self.split_at {
@@ -734,28 +732,41 @@ where
     }
 }
 
+/// The [style](Style) of a [`Split`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Style {
-    pub unfocused: Styled,
-    pub focused: Styled,
+    /// The [`StyleSheet`] of the [`Split`] while it's unfocused.
+    pub unfocused: StyleSheet,
+    /// The [`StyleSheet`] of the [`Split`] while it's focused.
+    pub focused: StyleSheet,
+    /// Whether the separator should be snapped to the pixel grid.
     pub snap: bool,
 }
 
+/// The [stylesheet](StyleSheet) of a [`Split`].
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Styled {
+pub struct StyleSheet {
+    /// The color of the separator.
     pub color: Color,
+    /// The width of the separator.
     pub width: f32,
+    /// The radius of the corners of the separator.
     pub radius: Radius,
 }
 
-pub trait Catalog: Sized {
+/// The [theme catalog](Catalog) of a [`Split`].
+pub trait Catalog {
+    /// The [`item class`](Self::Class) of the [`Catalog`].
     type Class<'a>;
-    #[must_use]
+
+    /// The default [`Class`](Self::Class) produced by the [`Catalog`].
     fn default<'a>() -> Self::Class<'a>;
-    #[must_use]
+
+    /// The [`Style`] of a [`Class`](Self::Class).
     fn style(&self, class: &Self::Class<'_>) -> Style;
 }
 
+/// A styling function for a [`Split`].
 pub type StyleFn<'a, Theme> = Box<dyn Fn(&Theme) -> Style + 'a>;
 
 impl Catalog for iced_core::Theme {
@@ -770,17 +781,18 @@ impl Catalog for iced_core::Theme {
     }
 }
 
+/// The default styling of a [`Split`].
 #[must_use]
 pub fn default(theme: &iced_core::Theme) -> Style {
     let palette = theme.extended_palette();
 
     Style {
-        unfocused: Styled {
+        unfocused: StyleSheet {
             color: palette.background.strong.color,
             width: 1.0,
             radius: 0.5.into(),
         },
-        focused: Styled {
+        focused: StyleSheet {
             color: palette.primary.base.color,
             width: 5.0,
             radius: 2.5.into(),
