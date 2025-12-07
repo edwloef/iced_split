@@ -2,10 +2,14 @@
 name = "iced_split"
 version = "0.1.0"
 edition = "2024"
+description = "resizeable splits for iced"
+repository = "https://github.com/edwloef/iced_split"
 license = "MIT"
+keywords = ["gui", "widget", "iced", "iced-rs"]
+categories = ["gui"]
 
 [dependencies]
-iced_core = { git = "https://github.com/iced-rs/iced", branch = "master" }
+iced_core.git = "https://github.com/iced-rs/iced"
 
 [lints.rust]
 missing_copy_implementations = "warn"
@@ -35,7 +39,6 @@ allow_attributes = "warn"
 empty_enum_variants_with_brackets = "warn"
 empty_structs_with_brackets = "warn"
 get_unwrap = "warn"
-iter_over_hash_type = "warn"
 if_then_some_else_none = "warn"
 lossy_float_literal = "warn"
 pub_without_shorthand = "warn"

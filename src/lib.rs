@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 use iced_core::{
     Animation, Clipboard, Color, Element, Event, Layout, Length, Point, Rectangle, Shell, Size,
     Vector, Widget,
