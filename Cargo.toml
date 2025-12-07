@@ -9,7 +9,7 @@ keywords = ["gui", "widget", "iced", "iced-rs"]
 categories = ["gui"]
 
 [dependencies]
-iced_core.git = "https://github.com/iced-rs/iced"
+iced_core = "0.14.0"
 
 [lints.rust]
 missing_copy_implementations = "warn"
