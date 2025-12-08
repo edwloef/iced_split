@@ -2,7 +2,7 @@
 
 ## `iced_split` - resizeable splits for `iced`
 
-[![iced](https://img.shields.io/badge/0.14-blue?logo=iced&style=for-the-badge)](https://github.com/generic-daw/generic-daw)
+[![iced](https://img.shields.io/badge/0.14-blue?logo=iced&style=for-the-badge)](https://github.com/iced-rs/iced)
 [![license](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](https://github.com/edwloef/iced_split/blob/master/LICENSE)
 [![crates.io](https://img.shields.io/crates/v/iced_split?style=for-the-badge)](https://crates.io/crates/iced_split)
 [![docs.rs](https://img.shields.io/docsrs/iced_split?style=for-the-badge)](https://docs.rs/iced_split)
