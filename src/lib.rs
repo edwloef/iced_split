@@ -631,8 +631,14 @@ where
         let layout = self.start_layout(layout_direction);
         let layout = layout + (self.handle_width - width) / 2.0;
         let (x, y) = self.direction.select(0.0, layout);
-        let (x, y) = ((x + bounds.x).round(), (y + bounds.y).round());
+        let (x, y) = (x + bounds.x, y + bounds.y);
         let (width, height) = self.direction.select(cross_direction, width);
+        let (width, height) = if style.snap {
+            let unit = 1.0 / renderer.scale_factor().unwrap_or(1.0);
+            (width.max(unit), height.max(unit))
+        } else {
+            (width, height)
+        };
 
         renderer.fill_quad(
             Quad {
