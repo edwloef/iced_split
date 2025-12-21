@@ -1,8 +1,8 @@
 #![doc = include_str!("../README.md")]
 
 use iced_core::{
-    Animation, Clipboard, Color, Element, Event, Layout, Length, Point, Rectangle, Shell, Size,
-    Vector, Widget,
+    Animation, Clipboard, Color, Element, Event, Layout, Length, Pixels, Point, Rectangle, Shell,
+    Size, Vector, Widget,
     border::{self, Radius},
     layout::{Limits, Node},
     mouse::{self, Click, Cursor, Interaction, click::Kind},
@@ -289,10 +289,10 @@ where
         self
     }
 
-    /// Sets the width of the [`Split`]'s separator.
+    /// Sets the width of the [`Split`]'s handle.
     #[must_use]
-    pub fn handle_width(mut self, handle_width: f32) -> Self {
-        self.handle_width = handle_width;
+    pub fn handle_width(mut self, handle_width: impl Into<Pixels>) -> Self {
+        self.handle_width = handle_width.into().0;
         self
     }
 
