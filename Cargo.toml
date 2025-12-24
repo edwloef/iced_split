@@ -9,6 +9,9 @@ keywords = ["gui", "widget", "iced", "iced-rs"]
 categories = ["gui"]
 
 [dependencies]
+iced_core = "0.15.0-dev"
+
+[patch.crates-io]
 iced_core.git = "https://github.com/iced-rs/iced"
 
 [lints.rust]
