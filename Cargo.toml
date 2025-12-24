@@ -1,6 +1,6 @@
 [package]
 name = "iced_split"
-version = "0.1.0"
+version = "0.2.0-dev"
 edition = "2024"
 description = "resizeable splits for iced"
 repository = "https://github.com/edwloef/iced_split"
