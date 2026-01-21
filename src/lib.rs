@@ -340,7 +340,7 @@ where
         let (cross_direction, layout_direction) =
             self.direction.select(bounds.width, bounds.height);
 
-        let layout = self.start_layout(layout_direction);
+        let layout = self.start_layout(layout_direction) + self.spacing;
         let (x, y) = self.direction.select(0.0, layout);
         let (x, y) = (x + bounds.x, y + bounds.y);
         let (width, height) = self.direction.select(cross_direction, self.handle_width);
@@ -650,7 +650,7 @@ where
             self.direction.select(bounds.width, bounds.height);
 
         let layout = self.start_layout(layout_direction);
-        let layout = layout + (self.handle_width - width) / 2.0;
+        let layout = layout + self.spacing + (self.handle_width - width) / 2.0;
         let (x, y) = self.direction.select(0.0, layout);
         let (x, y) = (x + bounds.x, y + bounds.y);
         let (width, height) = self.direction.select(cross_direction, width);
