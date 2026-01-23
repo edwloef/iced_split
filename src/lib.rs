@@ -113,6 +113,7 @@ where
     strategy: Strategy,
     direction: Direction,
     handle_width: f32,
+    spacing: f32,
     duration: Duration,
     delay: Duration,
     class: Theme::Class<'a>,
@@ -141,6 +142,7 @@ where
             strategy: Strategy::default(),
             direction: Direction::default(),
             handle_width: 11.0,
+            spacing: 0.0,
             duration: Duration::from_millis(100),
             delay: Duration::from_millis(100),
             class: Theme::default(),
@@ -296,6 +298,13 @@ where
         self
     }
 
+    /// Sets the spacing between the [`Split`]'s handle and content.
+    #[must_use]
+    pub fn spacing(mut self, spacing: impl Into<Pixels>) -> Self {
+        self.spacing = spacing.into().0;
+        self
+    }
+
     /// Sets the duration of the [`Split`]'s focus and unfocus transitions.
     #[must_use]
     pub fn focus_duration(mut self, duration: Duration) -> Self {
@@ -331,7 +340,7 @@ where
         let (cross_direction, layout_direction) =
             self.direction.select(bounds.width, bounds.height);
 
-        let layout = self.start_layout(layout_direction);
+        let layout = self.start_layout(layout_direction) + self.spacing;
         let (x, y) = self.direction.select(0.0, layout);
         let (x, y) = (x + bounds.x, y + bounds.y);
         let (width, height) = self.direction.select(cross_direction, self.handle_width);
@@ -352,13 +361,20 @@ where
         self.on_drag.is_some() && state.status != Status::None
     }
 
+    fn handle_width_with_spacing(&self) -> f32 {
+        self.handle_width + 2.0 * self.spacing
+    }
+
     fn start_layout(&self, layout_direction: f32) -> f32 {
+        let handle_width_with_spacing = self.handle_width_with_spacing();
         match self.strategy {
-            Strategy::Relative => layout_direction.mul_add(self.split_at, -self.handle_width / 2.0),
+            Strategy::Relative => {
+                layout_direction.mul_add(self.split_at, -handle_width_with_spacing / 2.0)
+            }
             Strategy::Start => self.split_at,
-            Strategy::End => layout_direction - self.split_at - self.handle_width,
+            Strategy::End => layout_direction - self.split_at - handle_width_with_spacing,
         }
-        .min(layout_direction - self.handle_width)
+        .min(layout_direction - handle_width_with_spacing)
         .max(0.0)
     }
 }
@@ -422,12 +438,14 @@ where
         let (start_width, start_height) = self.direction.select(cross_direction, start_layout);
         let start_limits = Limits::new(Size::ZERO, Size::new(start_width, start_height));
 
-        let end_layout = layout_direction - start_layout - self.handle_width;
+        let handle_width_with_spacing = self.handle_width_with_spacing();
+        let end_layout = layout_direction - start_layout - handle_width_with_spacing;
         let (end_width, end_height) = self.direction.select(cross_direction, end_layout);
         let end_limits = Limits::new(Size::ZERO, Size::new(end_width, end_height));
 
-        let (offset_width, offset_height) =
-            self.direction.select(0.0, start_layout + self.handle_width);
+        let (offset_width, offset_height) = self
+            .direction
+            .select(0.0, start_layout + handle_width_with_spacing);
 
         let children = vec![
             self.children[0]
@@ -510,10 +528,13 @@ where
 
                         let layout = self.direction.select(x - bounds.x, y - bounds.y).1;
 
+                        let handle_width_with_spacing = self.handle_width_with_spacing();
                         let split_at = match self.strategy {
                             Strategy::Relative => layout / layout_direction,
-                            Strategy::Start => layout - self.handle_width / 2.0,
-                            Strategy::End => layout_direction - layout - self.handle_width / 2.0,
+                            Strategy::Start => layout - handle_width_with_spacing / 2.0,
+                            Strategy::End => {
+                                layout_direction - layout - handle_width_with_spacing / 2.0
+                            }
                         };
 
                         if split_at != self.split_at {
@@ -629,7 +650,7 @@ where
             self.direction.select(bounds.width, bounds.height);
 
         let layout = self.start_layout(layout_direction);
-        let layout = layout + (self.handle_width - width) / 2.0;
+        let layout = layout + self.spacing + (self.handle_width - width) / 2.0;
         let (x, y) = self.direction.select(0.0, layout);
         let (x, y) = (x + bounds.x, y + bounds.y);
         let (width, height) = self.direction.select(cross_direction, width);
