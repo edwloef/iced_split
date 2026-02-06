@@ -1,8 +1,8 @@
 #![doc = include_str!("../README.md")]
 
 use iced_core::{
-    Animation, Clipboard, Color, Element, Event, Layout, Length, Pixels, Point, Rectangle, Shell,
-    Size, Vector, Widget,
+    Animation, Color, Element, Event, Layout, Length, Pixels, Point, Rectangle, Shell, Size,
+    Vector, Widget,
     border::{self, Radius},
     layout::{Limits, Node},
     mouse::{self, Click, Cursor, Interaction, click::Kind},
@@ -361,20 +361,18 @@ where
         self.on_drag.is_some() && state.status != Status::None
     }
 
-    fn handle_width_with_spacing(&self) -> f32 {
-        self.handle_width + 2.0 * self.spacing
+    fn separation(&self) -> f32 {
+        self.spacing.mul_add(2.0, self.handle_width)
     }
 
     fn start_layout(&self, layout_direction: f32) -> f32 {
-        let handle_width_with_spacing = self.handle_width_with_spacing();
+        let separation = self.separation();
         match self.strategy {
-            Strategy::Relative => {
-                layout_direction.mul_add(self.split_at, -handle_width_with_spacing / 2.0)
-            }
+            Strategy::Relative => layout_direction.mul_add(self.split_at, -separation / 2.0),
             Strategy::Start => self.split_at,
-            Strategy::End => layout_direction - self.split_at - handle_width_with_spacing,
+            Strategy::End => layout_direction - self.split_at - separation,
         }
-        .min(layout_direction - handle_width_with_spacing)
+        .min(layout_direction - separation)
         .max(0.0)
     }
 }
@@ -438,14 +436,12 @@ where
         let (start_width, start_height) = self.direction.select(cross_direction, start_layout);
         let start_limits = Limits::new(Size::ZERO, Size::new(start_width, start_height));
 
-        let handle_width_with_spacing = self.handle_width_with_spacing();
-        let end_layout = layout_direction - start_layout - handle_width_with_spacing;
+        let separation = self.separation();
+        let end_layout = layout_direction - start_layout - separation;
         let (end_width, end_height) = self.direction.select(cross_direction, end_layout);
         let end_limits = Limits::new(Size::ZERO, Size::new(end_width, end_height));
 
-        let (offset_width, offset_height) = self
-            .direction
-            .select(0.0, start_layout + handle_width_with_spacing);
+        let (offset_width, offset_height) = self.direction.select(0.0, start_layout + separation);
 
         let children = vec![
             self.children[0]
@@ -467,7 +463,6 @@ where
         layout: Layout<'_>,
         cursor: Cursor,
         renderer: &Renderer,
-        clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, Message>,
         viewport: &Rectangle,
     ) {
@@ -476,9 +471,9 @@ where
             .zip(&mut tree.children)
             .zip(layout.children())
             .for_each(|((child, tree), layout)| {
-                child.as_widget_mut().update(
-                    tree, event, layout, cursor, renderer, clipboard, shell, viewport,
-                );
+                child
+                    .as_widget_mut()
+                    .update(tree, event, layout, cursor, renderer, shell, viewport);
             });
 
         let state = tree.state.downcast_mut::<State>();
@@ -528,13 +523,11 @@ where
 
                         let layout = self.direction.select(x - bounds.x, y - bounds.y).1;
 
-                        let handle_width_with_spacing = self.handle_width_with_spacing();
+                        let separation = self.separation();
                         let split_at = match self.strategy {
                             Strategy::Relative => layout / layout_direction,
-                            Strategy::Start => layout - handle_width_with_spacing / 2.0,
-                            Strategy::End => {
-                                layout_direction - layout - handle_width_with_spacing / 2.0
-                            }
+                            Strategy::Start => layout - separation / 2.0,
+                            Strategy::End => layout_direction - layout - separation / 2.0,
                         };
 
                         if split_at != self.split_at {
