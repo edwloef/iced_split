@@ -362,13 +362,13 @@ where
     }
 
     fn separation(&self) -> f32 {
-        self.spacing.mul_add(2.0, self.handle_width)
+        2.0 * self.spacing + self.handle_width
     }
 
     fn start_layout(&self, layout_direction: f32) -> f32 {
         let separation = self.separation();
         match self.strategy {
-            Strategy::Relative => layout_direction.mul_add(self.split_at, -separation / 2.0),
+            Strategy::Relative => layout_direction * self.split_at - separation / 2.0,
             Strategy::Start => self.split_at,
             Strategy::End => layout_direction - self.split_at - separation,
         }
