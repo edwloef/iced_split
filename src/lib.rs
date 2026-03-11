@@ -801,7 +801,7 @@ impl Catalog for iced_core::Theme {
 /// The default styling of a [`Split`].
 #[must_use]
 pub fn default(theme: &iced_core::Theme) -> Style {
-    let palette = theme.extended_palette();
+    let palette = theme.palette();
 
     Style {
         unfocused: StyleSheet {
