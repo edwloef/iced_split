@@ -8,7 +8,6 @@ use iced_core::{
     mouse::{self, Click, Cursor, Interaction, click::Kind},
     overlay,
     renderer::{self, Quad},
-    theme::palette::mix,
     time::{Duration, Instant},
     widget::{Operation, Tree, tree},
     window,
@@ -605,11 +604,9 @@ where
         let style = theme.style(&self.class);
         let state = tree.state.downcast_ref::<State>();
 
-        let color = mix(
-            style.unfocused.color,
-            style.focused.color,
-            state.mix.interpolate(0.0, 1.0, state.now),
-        );
+        let color = state
+            .mix
+            .interpolate(style.unfocused.color, style.focused.color, state.now);
 
         let width = state
             .mix
