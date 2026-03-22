@@ -80,25 +80,6 @@ pub enum Strategy {
     End,
 }
 
-impl State {
-    fn new(duration: Duration, delay: Duration) -> Self {
-        Self {
-            status: Status::None,
-            last_click: None,
-            mix: Animation::new(false).duration(duration).delay(delay),
-            now: Instant::now(),
-            duration,
-            delay,
-        }
-    }
-
-    fn diff(&mut self, duration: Duration, delay: Duration) {
-        if self.duration != duration || self.delay != delay {
-            self.mix = self.mix.clone().delay(delay).duration(duration);
-        }
-    }
-}
-
 /// Resizeable splits for `iced`.
 #[expect(missing_debug_implementations, clippy::struct_field_names)]
 pub struct Split<'a, Message, Theme, Renderer>
@@ -376,6 +357,15 @@ where
     }
 }
 
+#[derive(PartialEq)]
+enum Status {
+    Dragging,
+    Grabbed,
+    DoubleClicked,
+    Hovering,
+    None,
+}
+
 struct State {
     status: Status,
     last_click: Option<Click>,
@@ -385,13 +375,23 @@ struct State {
     delay: Duration,
 }
 
-#[derive(PartialEq)]
-enum Status {
-    Dragging,
-    Grabbed,
-    DoubleClicked,
-    Hovering,
-    None,
+impl State {
+    fn new(duration: Duration, delay: Duration) -> Self {
+        Self {
+            status: Status::None,
+            last_click: None,
+            mix: Animation::new(false).duration(duration).delay(delay),
+            now: Instant::now(),
+            duration,
+            delay,
+        }
+    }
+
+    fn diff(&mut self, duration: Duration, delay: Duration) {
+        if self.duration != duration || self.delay != delay {
+            self.mix = self.mix.clone().delay(delay).duration(duration);
+        }
+    }
 }
 
 impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
