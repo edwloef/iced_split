@@ -401,10 +401,6 @@ where
     Theme: Catalog + 'a,
     Renderer: iced_core::Renderer + 'a,
 {
-    fn children(&self) -> Vec<Tree> {
-        self.children.iter().map(Tree::new).collect()
-    }
-
     fn size(&self) -> Size<Length> {
         Size::new(Length::Fill, Length::Fill)
     }
@@ -417,12 +413,12 @@ where
         tree::State::new(State::new(self.duration, self.delay))
     }
 
-    fn diff(&self, tree: &mut Tree) {
+    fn diff(&mut self, tree: &mut Tree) {
         tree.state
             .downcast_mut::<State>()
             .diff(self.duration, self.delay);
 
-        tree.diff_children(&self.children);
+        tree.diff_children(&mut self.children);
     }
 
     fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) -> Node {
