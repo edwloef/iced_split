@@ -641,7 +641,7 @@ where
         let (x, y) = (x + bounds.x, y + bounds.y);
         let (width, height) = self.direction.select(cross_direction, width);
         let (width, height) = if style.snap {
-            let unit = 1.0 / renderer.scale_factor().unwrap_or(1.0);
+            let unit = 1.0 / renderer.hint_factor().unwrap_or(1.0);
             (width.max(unit), height.max(unit))
         } else {
             (width, height)
