@@ -4,7 +4,7 @@ use iced_core::{
     Animation, Color, Element, Event, Layout, Length, Pixels, Point, Rectangle, Shell, Size,
     Vector, Widget,
     border::{self, Radius},
-    layout::{Limits, Node},
+    layout::Limits,
     length::{Bounds, Constraint},
     mouse::{self, Click, Cursor, Interaction, click::Kind},
     overlay,
@@ -333,16 +333,12 @@ where
         }) {
             Status::Hovering
         } else {
-            Status::None
+            Status::Idle
         }
     }
 
     fn focused(&self, state: &State) -> bool {
-        self.on_drag.is_some() && state.status != Status::None
-    }
-
-    fn separation(&self) -> f32 {
-        2.0 * self.spacing + self.handle_width
+        self.on_drag.is_some() && state.status != Status::Idle
     }
 }
 
@@ -352,7 +348,7 @@ enum Status {
     Grabbed,
     DoubleClicked,
     Hovering,
-    None,
+    Idle,
 }
 
 struct State {
@@ -368,7 +364,7 @@ struct State {
 impl State {
     fn new(duration: Duration, delay: Duration) -> Self {
         Self {
-            status: Status::None,
+            status: Status::Idle,
             last_click: None,
             start_layout: 0.0,
             mix: Animation::new(false).duration(duration).delay(delay),
@@ -412,7 +408,7 @@ where
         tree.diff_children(&mut self.children);
     }
 
-    fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) -> Node {
+    fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) {
         let start_size = self.children[0].as_widget().size();
         let start_min = match self.direction.select(start_size.width, start_size.height).1 {
             Length::Fixed(min)
@@ -435,11 +431,10 @@ where
             _ => 0.0,
         };
 
-        let max_limits = limits.max();
         let (cross_direction, layout_direction) =
-            self.direction.select(max_limits.width, max_limits.height);
+            self.direction.select(limits.max.width, limits.max.height);
 
-        let separation = self.separation();
+        let separation = 2.0 * self.spacing + self.handle_width;
         let state = tree.state.downcast_mut::<State>();
         state.start_layout = match self.strategy {
             Strategy::Relative => layout_direction * self.split_at - separation / 2.0,
@@ -453,32 +448,30 @@ where
             self.direction.select(cross_direction, state.start_layout);
         let start_limits = Limits::new(Size::ZERO, Size::new(start_width, start_height));
 
-        let separation = self.separation();
+        self.children[0]
+            .as_widget_mut()
+            .layout(&mut tree.children[0], renderer, &start_limits);
+
         let end_layout = layout_direction - state.start_layout - separation;
         let (end_width, end_height) = self.direction.select(cross_direction, end_layout);
         let end_limits = Limits::new(Size::ZERO, Size::new(end_width, end_height));
 
+        self.children[1]
+            .as_widget_mut()
+            .layout(&mut tree.children[1], renderer, &end_limits);
+
         let (offset_width, offset_height) =
             self.direction.select(0.0, state.start_layout + separation);
 
-        let children = vec![
-            self.children[0]
-                .as_widget_mut()
-                .layout(&mut tree.children[0], renderer, &start_limits),
-            self.children[1]
-                .as_widget_mut()
-                .layout(&mut tree.children[1], renderer, &end_limits)
-                .translate(Vector::new(offset_width, offset_height)),
-        ];
-
-        Node::with_children(max_limits, children)
+        tree.children[0].translation = Vector::ZERO;
+        tree.children[1].translation = Vector::new(offset_width, offset_height);
     }
 
     fn update(
         &mut self,
         tree: &mut Tree,
         event: &Event,
-        layout: Layout<'_>,
+        layout: Layout,
         cursor: Cursor,
         renderer: &Renderer,
         shell: &mut Shell<'_, Message>,
@@ -486,9 +479,8 @@ where
     ) {
         self.children
             .iter_mut()
-            .zip(&mut tree.children)
-            .zip(layout.children())
-            .for_each(|((child, tree), layout)| {
+            .zip(layout.iter_mut(&mut tree.children))
+            .for_each(|(child, (layout, tree))| {
                 child
                     .as_widget_mut()
                     .update(tree, event, layout, cursor, renderer, shell, viewport);
@@ -540,7 +532,7 @@ where
                         let layout_direction = self.direction.select(bounds.width, bounds.height).1;
                         let split_at = self.direction.select(x - bounds.x, y - bounds.y).1;
 
-                        let separation = self.separation();
+                        let separation = 2.0 * self.spacing + self.handle_width;
                         let split_at = match self.strategy {
                             Strategy::Relative => split_at / layout_direction,
                             Strategy::Start => split_at - separation / 2.0,
@@ -601,15 +593,14 @@ where
         renderer: &mut Renderer,
         theme: &Theme,
         style: &renderer::Style,
-        layout: Layout<'_>,
+        layout: Layout,
         cursor: Cursor,
         viewport: &Rectangle,
     ) {
         self.children
             .iter()
-            .zip(&tree.children)
-            .zip(layout.children())
-            .for_each(|((child, tree), layout)| {
+            .zip(layout.iter(&tree.children))
+            .for_each(|(child, (layout, tree))| {
                 child
                     .as_widget()
                     .draw(tree, renderer, theme, style, layout, cursor, viewport);
@@ -681,7 +672,7 @@ where
     fn mouse_interaction(
         &self,
         tree: &Tree,
-        layout: Layout<'_>,
+        layout: Layout,
         cursor: Cursor,
         viewport: &Rectangle,
         renderer: &Renderer,
@@ -696,9 +687,8 @@ where
         } else {
             self.children
                 .iter()
-                .zip(&tree.children)
-                .zip(layout.children())
-                .map(|((child, tree), layout)| {
+                .zip(layout.iter(&tree.children))
+                .map(|(child, (layout, tree))| {
                     child
                         .as_widget()
                         .mouse_interaction(tree, layout, cursor, viewport, renderer)
@@ -711,10 +701,11 @@ where
     fn overlay<'b>(
         &'b mut self,
         tree: &'b mut Tree,
-        layout: Layout<'b>,
+        layout: Layout,
         renderer: &Renderer,
         viewport: &Rectangle,
         translation: Vector,
+        window: Size,
     ) -> Vec<overlay::Element<'b, Message, Theme, Renderer>> {
         overlay::from_children(
             &mut self.children,
@@ -723,13 +714,14 @@ where
             renderer,
             viewport,
             translation,
+            window,
         )
     }
 
     fn operate(
         &mut self,
         tree: &mut Tree,
-        layout: Layout<'_>,
+        layout: Layout,
         viewport: &Rectangle,
         renderer: &Renderer,
         operation: &mut dyn Operation,
@@ -738,12 +730,11 @@ where
         operation.traverse(&mut |operation| {
             self.children
                 .iter_mut()
-                .zip(&mut tree.children)
-                .zip(layout.children())
-                .for_each(|((child, state), layout)| {
+                .zip(layout.iter_mut(&mut tree.children))
+                .for_each(|(child, (layout, tree))| {
                     child
                         .as_widget_mut()
-                        .operate(state, layout, viewport, renderer, operation);
+                        .operate(tree, layout, viewport, renderer, operation);
                 });
         });
     }
