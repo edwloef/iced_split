@@ -465,6 +465,8 @@ where
 
         tree.children[0].translation = Vector::ZERO;
         tree.children[1].translation = Vector::new(offset_width, offset_height);
+
+        tree.size = limits.max;
     }
 
     fn update(
