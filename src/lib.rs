@@ -523,7 +523,6 @@ where
                 }
                 mouse::Event::CursorMoved {
                     position: Point { x, y },
-                    ..
                 } => {
                     if let Some(on_drag) = &self.on_drag
                         && matches!(

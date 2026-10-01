@@ -57,6 +57,7 @@ string_lit_chars_any = "warn"
 str_to_string = "warn"
 try_err = "warn"
 unused_trait_names = "warn"
+unnecessary_rest_pattern = "warn"
 
 dbg_macro = "warn"
 print_stderr = "warn"
