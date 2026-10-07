@@ -1,8 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 use iced_core::{
-    Animation, Color, Element, Event, Layout, Length, Pixels, Point, Rectangle, Shell, Size,
-    Vector, Widget,
+    Animation, Color, Event, Layout, Length, Pixels, Point, Rectangle, Shell, Size, Vector, Widget,
     border::{self, Radius},
     layout::Limits,
     length::{Bounds, Constraint},
@@ -10,22 +9,21 @@ use iced_core::{
     overlay,
     renderer::{self, Quad},
     time::{Duration, Instant},
-    widget::{Operation, Tree, tree},
+    widget::{Meta, Operation, Tree, tree},
     window,
 };
 
 /// Creates a new [`horizontal`](Direction::Horizontal) [`Split`] with the given `top` and `bottom`
 /// widgets, a split position, and a function to emit messages when the split gets dragged.
-pub fn horizontal_split<'a, Message, Theme, Renderer>(
-    top: impl Into<Element<'a, Message, Theme, Renderer>>,
-    bottom: impl Into<Element<'a, Message, Theme, Renderer>>,
+pub fn horizontal_split<'a, Message, W, Theme>(
+    top: W,
+    bottom: W,
     split_at: f32,
     on_drag: impl Fn(f32) -> Message + 'a,
-) -> Split<'a, Message, Theme, Renderer>
+) -> Split<'a, Message, W, Theme>
 where
     Message: 'a,
     Theme: Catalog + 'a,
-    Renderer: iced_core::Renderer + 'a,
 {
     Split::new(top, bottom, split_at)
         .direction(Direction::Horizontal)
@@ -34,16 +32,15 @@ where
 
 /// Creates a new [`vertical`](Direction::Vertical) [`Split`] with the given `left` and `right`
 /// widgets, a split position, and a function to emit messages when the split gets dragged.
-pub fn vertical_split<'a, Message, Theme, Renderer>(
-    left: impl Into<Element<'a, Message, Theme, Renderer>>,
-    right: impl Into<Element<'a, Message, Theme, Renderer>>,
+pub fn vertical_split<'a, Message, W, Theme>(
+    left: W,
+    right: W,
     split_at: f32,
     on_drag: impl Fn(f32) -> Message + 'a,
-) -> Split<'a, Message, Theme, Renderer>
+) -> Split<'a, Message, W, Theme>
 where
     Message: 'a,
     Theme: Catalog + 'a,
-    Renderer: iced_core::Renderer + 'a,
 {
     Split::new(left, right, split_at).on_drag(on_drag)
 }
@@ -83,13 +80,12 @@ pub enum Strategy {
 
 /// Resizeable splits for `iced`.
 #[expect(missing_debug_implementations, clippy::struct_field_names)]
-pub struct Split<'a, Message, Theme, Renderer>
+pub struct Split<'a, Message, W, Theme>
 where
     Message: 'a,
     Theme: Catalog + 'a,
-    Renderer: iced_core::Renderer + 'a,
 {
-    children: [Element<'a, Message, Theme, Renderer>; 2],
+    children: [W; 2],
     split_at: f32,
     strategy: Strategy,
     direction: Direction,
@@ -104,21 +100,16 @@ where
     on_double_click: Option<Box<dyn Fn() -> Message + 'a>>,
 }
 
-impl<'a, Message, Theme, Renderer> Split<'a, Message, Theme, Renderer>
+impl<'a, Message, W, Theme> Split<'a, Message, W, Theme>
 where
     Message: 'a,
     Theme: Catalog + 'a,
-    Renderer: iced_core::Renderer + 'a,
 {
     /// Creates a new [`Split`] with the given `start` and `end` widgets and a split position.
     #[must_use]
-    pub fn new(
-        start: impl Into<Element<'a, Message, Theme, Renderer>>,
-        end: impl Into<Element<'a, Message, Theme, Renderer>>,
-        split_at: f32,
-    ) -> Self {
+    pub fn new(start: W, end: W, split_at: f32) -> Self {
         Self {
-            children: [start.into(), end.into()],
+            children: [start, end],
             split_at,
             strategy: Strategy::default(),
             direction: Direction::default(),
@@ -381,12 +372,20 @@ impl State {
     }
 }
 
-impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
-    for Split<'a, Message, Theme, Renderer>
+impl<'a, Message, W, Theme> Meta for Split<'a, Message, W, Theme>
 where
     Message: 'a,
     Theme: Catalog + 'a,
-    Renderer: iced_core::Renderer + 'a,
+{
+}
+
+impl<'a, Message, W, Theme, Renderer> Widget<Message, Theme, Renderer>
+    for Split<'a, Message, W, Theme>
+where
+    Message: 'a,
+    Theme: Catalog + 'a,
+    Renderer: iced_core::Renderer,
+    W: Widget<Message, Theme, Renderer>,
 {
     fn size(&self) -> Size<Length> {
         Size::new(Length::Fill, Length::Fill)
@@ -409,7 +408,7 @@ where
     }
 
     fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) {
-        let start_size = self.children[0].as_widget().size();
+        let start_size = self.children[0].size();
         let start_min = match self.direction.select(start_size.width, start_size.height).1 {
             Length::Fixed(min)
             | Length::Bounded {
@@ -420,7 +419,7 @@ where
             _ => 0.0,
         };
 
-        let end_size = self.children[1].as_widget().size();
+        let end_size = self.children[1].size();
         let end_min = match self.direction.select(end_size.width, end_size.height).1 {
             Length::Fixed(min)
             | Length::Bounded {
@@ -448,17 +447,13 @@ where
             self.direction.select(cross_direction, state.start_layout);
         let start_limits = Limits::new(Size::ZERO, Size::new(start_width, start_height));
 
-        self.children[0]
-            .as_widget_mut()
-            .layout(&mut tree.children[0], renderer, &start_limits);
+        self.children[0].layout(&mut tree.children[0], renderer, &start_limits);
 
         let end_layout = layout_direction - state.start_layout - separation;
         let (end_width, end_height) = self.direction.select(cross_direction, end_layout);
         let end_limits = Limits::new(Size::ZERO, Size::new(end_width, end_height));
 
-        self.children[1]
-            .as_widget_mut()
-            .layout(&mut tree.children[1], renderer, &end_limits);
+        self.children[1].layout(&mut tree.children[1], renderer, &end_limits);
 
         let (offset_width, offset_height) =
             self.direction.select(0.0, state.start_layout + separation);
@@ -483,9 +478,7 @@ where
             .iter_mut()
             .zip(layout.iter_mut(&mut tree.children))
             .for_each(|(child, (layout, tree))| {
-                child
-                    .as_widget_mut()
-                    .update(tree, event, layout, cursor, renderer, shell, viewport);
+                child.update(tree, event, layout, cursor, renderer, shell, viewport);
             });
 
         let state = tree.state.downcast_mut::<State>();
@@ -602,9 +595,7 @@ where
             .iter()
             .zip(layout.iter(&tree.children))
             .for_each(|(child, (layout, tree))| {
-                child
-                    .as_widget()
-                    .draw(tree, renderer, theme, style, layout, cursor, viewport);
+                child.draw(tree, renderer, theme, style, layout, cursor, viewport);
             });
 
         let style = theme.style(&self.class);
@@ -690,9 +681,7 @@ where
                 .iter()
                 .zip(layout.iter(&tree.children))
                 .map(|(child, (layout, tree))| {
-                    child
-                        .as_widget()
-                        .mouse_interaction(tree, layout, cursor, viewport, renderer)
+                    child.mouse_interaction(tree, layout, cursor, viewport, renderer)
                 })
                 .max()
                 .unwrap_or_default()
@@ -733,23 +722,9 @@ where
                 .iter_mut()
                 .zip(layout.iter_mut(&mut tree.children))
                 .for_each(|(child, (layout, tree))| {
-                    child
-                        .as_widget_mut()
-                        .operate(tree, layout, viewport, renderer, operation);
+                    child.operate(tree, layout, viewport, renderer, operation);
                 });
         });
-    }
-}
-
-impl<'a, Message, Theme, Renderer> From<Split<'a, Message, Theme, Renderer>>
-    for Element<'a, Message, Theme, Renderer>
-where
-    Message: 'a,
-    Theme: Catalog + 'a,
-    Renderer: iced_core::Renderer + 'a,
-{
-    fn from(value: Split<'a, Message, Theme, Renderer>) -> Self {
-        Self::new(value)
     }
 }
 

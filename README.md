@@ -14,7 +14,7 @@
 `iced_split` provides a pane-style resizeable split widget for use with the [`iced`](https://github.com/iced-rs/iced) GUI library.
 
 ```rust
-use iced::Element;
+use iced::Widget;
 use iced_split::vertical_split;
 
 enum Message {
@@ -32,14 +32,13 @@ impl State {
 		}
 	}
 
-	fn view(&self) -> Element<'_, Message> {
+	fn view(&self) -> impl Widget<Message> {
 		vertical_split(
 			"left pane",
 			"right pane",
 			self.split_at,
 			Message::OnDrag,
 		)
-		.into()
 	}
 }
 ```
