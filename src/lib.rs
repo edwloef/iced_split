@@ -15,12 +15,12 @@ use iced_core::{
 
 /// Creates a new [`horizontal`](Direction::Horizontal) [`Split`] with the given `top` and `bottom`
 /// widgets, a split position, and a function to emit messages when the split gets dragged.
-pub fn horizontal_split<'a, Message, W, Theme>(
-    top: W,
-    bottom: W,
+pub fn horizontal_split<'a, Message, Top, Bottom, Theme>(
+    top: Top,
+    bottom: Bottom,
     split_at: f32,
     on_drag: impl Fn(f32) -> Message + 'a,
-) -> Split<'a, Message, W, Theme>
+) -> Split<'a, Message, Top, Bottom, Theme>
 where
     Message: 'a,
     Theme: Catalog + 'a,
@@ -32,12 +32,12 @@ where
 
 /// Creates a new [`vertical`](Direction::Vertical) [`Split`] with the given `left` and `right`
 /// widgets, a split position, and a function to emit messages when the split gets dragged.
-pub fn vertical_split<'a, Message, W, Theme>(
-    left: W,
-    right: W,
+pub fn vertical_split<'a, Message, Left, Right, Theme>(
+    left: Left,
+    right: Right,
     split_at: f32,
     on_drag: impl Fn(f32) -> Message + 'a,
-) -> Split<'a, Message, W, Theme>
+) -> Split<'a, Message, Left, Right, Theme>
 where
     Message: 'a,
     Theme: Catalog + 'a,
@@ -80,12 +80,13 @@ pub enum Strategy {
 
 /// Resizeable splits for `iced`.
 #[expect(missing_debug_implementations, clippy::struct_field_names)]
-pub struct Split<'a, Message, W, Theme>
+pub struct Split<'a, Message, Start, End, Theme>
 where
     Message: 'a,
     Theme: Catalog + 'a,
 {
-    children: [W; 2],
+    start: Start,
+    end: End,
     split_at: f32,
     strategy: Strategy,
     direction: Direction,
@@ -100,16 +101,17 @@ where
     on_double_click: Option<Box<dyn Fn() -> Message + 'a>>,
 }
 
-impl<'a, Message, W, Theme> Split<'a, Message, W, Theme>
+impl<'a, Message, Start, End, Theme> Split<'a, Message, Start, End, Theme>
 where
     Message: 'a,
     Theme: Catalog + 'a,
 {
     /// Creates a new [`Split`] with the given `start` and `end` widgets and a split position.
     #[must_use]
-    pub fn new(start: W, end: W, split_at: f32) -> Self {
+    pub fn new(start: Start, end: End, split_at: f32) -> Self {
         Self {
-            children: [start, end],
+            start,
+            end,
             split_at,
             strategy: Strategy::default(),
             direction: Direction::default(),
@@ -372,20 +374,21 @@ impl State {
     }
 }
 
-impl<'a, Message, W, Theme> Meta for Split<'a, Message, W, Theme>
+impl<'a, Message, Start, End, Theme> Meta for Split<'a, Message, Start, End, Theme>
 where
     Message: 'a,
     Theme: Catalog + 'a,
 {
 }
 
-impl<'a, Message, W, Theme, Renderer> Widget<Message, Theme, Renderer>
-    for Split<'a, Message, W, Theme>
+impl<'a, Message, Start, End, Theme, Renderer> Widget<Message, Theme, Renderer>
+    for Split<'a, Message, Start, End, Theme>
 where
     Message: 'a,
     Theme: Catalog + 'a,
     Renderer: iced_core::Renderer,
-    W: Widget<Message, Theme, Renderer>,
+    Start: Widget<Message, Theme, Renderer>,
+    End: Widget<Message, Theme, Renderer>,
 {
     fn size(&self) -> Size<Length> {
         Size::new(Length::Fill, Length::Fill)
@@ -404,11 +407,20 @@ where
             .downcast_mut::<State>()
             .diff(self.duration, self.delay);
 
-        tree.diff_children(&mut self.children);
+        match tree.children.len() {
+            0 => tree
+                .children
+                .extend([Tree::new(&self.start), Tree::new(&self.end)]),
+            1 => tree.children.push(Tree::new(&self.end)),
+            _ => tree.children.truncate(2),
+        }
+
+        tree.children[0].diff(&mut self.start);
+        tree.children[1].diff(&mut self.end);
     }
 
     fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) {
-        let start_size = self.children[0].size();
+        let start_size = self.start.size();
         let start_min = match self.direction.select(start_size.width, start_size.height).1 {
             Length::Fixed(min)
             | Length::Bounded {
@@ -419,7 +431,7 @@ where
             _ => 0.0,
         };
 
-        let end_size = self.children[1].size();
+        let end_size = self.end.size();
         let end_min = match self.direction.select(end_size.width, end_size.height).1 {
             Length::Fixed(min)
             | Length::Bounded {
@@ -447,13 +459,15 @@ where
             self.direction.select(cross_direction, state.start_layout);
         let start_limits = Limits::new(Size::ZERO, Size::new(start_width, start_height));
 
-        self.children[0].layout(&mut tree.children[0], renderer, &start_limits);
+        self.start
+            .layout(&mut tree.children[0], renderer, &start_limits);
 
         let end_layout = layout_direction - state.start_layout - separation;
         let (end_width, end_height) = self.direction.select(cross_direction, end_layout);
         let end_limits = Limits::new(Size::ZERO, Size::new(end_width, end_height));
 
-        self.children[1].layout(&mut tree.children[1], renderer, &end_limits);
+        self.end
+            .layout(&mut tree.children[1], renderer, &end_limits);
 
         let (offset_width, offset_height) =
             self.direction.select(0.0, state.start_layout + separation);
@@ -474,12 +488,19 @@ where
         shell: &mut Shell<'_, Message>,
         viewport: &Rectangle,
     ) {
-        self.children
-            .iter_mut()
-            .zip(layout.iter_mut(&mut tree.children))
-            .for_each(|(child, (layout, tree))| {
-                child.update(tree, event, layout, cursor, renderer, shell, viewport);
-            });
+        let mut iter = layout.iter_mut(&mut tree.children);
+
+        {
+            let (layout, tree) = iter.next().unwrap();
+            self.start
+                .update(tree, event, layout, cursor, renderer, shell, viewport);
+        }
+
+        {
+            let (layout, tree) = iter.next().unwrap();
+            self.end
+                .update(tree, event, layout, cursor, renderer, shell, viewport);
+        }
 
         let state = tree.state.downcast_mut::<State>();
 
@@ -591,12 +612,19 @@ where
         cursor: Cursor,
         viewport: &Rectangle,
     ) {
-        self.children
-            .iter()
-            .zip(layout.iter(&tree.children))
-            .for_each(|(child, (layout, tree))| {
-                child.draw(tree, renderer, theme, style, layout, cursor, viewport);
-            });
+        let mut iter = layout.iter(&tree.children);
+
+        {
+            let (layout, tree) = iter.next().unwrap();
+            self.start
+                .draw(tree, renderer, theme, style, layout, cursor, viewport);
+        }
+
+        {
+            let (layout, tree) = iter.next().unwrap();
+            self.end
+                .draw(tree, renderer, theme, style, layout, cursor, viewport);
+        }
 
         let style = theme.style(&self.class);
         let state = tree.state.downcast_ref::<State>();
@@ -677,14 +705,21 @@ where
                 Direction::Vertical => Interaction::ResizingColumn,
             }
         } else {
-            self.children
-                .iter()
-                .zip(layout.iter(&tree.children))
-                .map(|(child, (layout, tree))| {
-                    child.mouse_interaction(tree, layout, cursor, viewport, renderer)
-                })
-                .max()
-                .unwrap_or_default()
+            let mut iter = layout.iter(&tree.children);
+
+            let mut mouse_interaction = {
+                let (layout, tree) = iter.next().unwrap();
+                self.start
+                    .mouse_interaction(tree, layout, cursor, viewport, renderer)
+            };
+
+            mouse_interaction = mouse_interaction.max({
+                let (layout, tree) = iter.next().unwrap();
+                self.end
+                    .mouse_interaction(tree, layout, cursor, viewport, renderer)
+            });
+
+            mouse_interaction
         }
     }
 
@@ -697,15 +732,21 @@ where
         translation: Vector,
         window: Size,
     ) -> Vec<overlay::Element<'b, Message, Theme, Renderer>> {
-        overlay::from_children(
-            &mut self.children,
-            tree,
-            layout,
-            renderer,
-            viewport,
-            translation,
-            window,
-        )
+        let mut iter = layout.iter_mut(&mut tree.children);
+
+        let mut overlay = {
+            let (layout, tree) = iter.next().unwrap();
+            self.start
+                .overlay(tree, layout, renderer, viewport, translation, window)
+        };
+
+        overlay.extend({
+            let (layout, tree) = iter.next().unwrap();
+            self.end
+                .overlay(tree, layout, renderer, viewport, translation, window)
+        });
+
+        overlay
     }
 
     fn operate(
@@ -718,12 +759,19 @@ where
     ) {
         operation.container(None, layout.bounds(), viewport);
         operation.traverse(&mut |operation| {
-            self.children
-                .iter_mut()
-                .zip(layout.iter_mut(&mut tree.children))
-                .for_each(|(child, (layout, tree))| {
-                    child.operate(tree, layout, viewport, renderer, operation);
-                });
+            let mut iter = layout.iter_mut(&mut tree.children);
+
+            {
+                let (layout, tree) = iter.next().unwrap();
+                self.start
+                    .operate(tree, layout, viewport, renderer, operation);
+            }
+
+            {
+                let (layout, tree) = iter.next().unwrap();
+                self.end
+                    .operate(tree, layout, viewport, renderer, operation);
+            }
         });
     }
 }
