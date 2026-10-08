@@ -78,15 +78,7 @@ pub enum Strategy {
     End,
 }
 
-/// Resizeable splits for `iced`.
-#[expect(missing_debug_implementations, clippy::struct_field_names)]
-pub struct Split<'a, Message, Start, End, Theme>
-where
-    Message: 'a,
-    Theme: Catalog + 'a,
-{
-    start: Start,
-    end: End,
+struct SplitInfo {
     split_at: f32,
     strategy: Strategy,
     direction: Direction,
@@ -94,6 +86,18 @@ where
     spacing: f32,
     duration: Duration,
     delay: Duration,
+}
+
+/// Resizeable splits for `iced`.
+#[expect(missing_debug_implementations)]
+pub struct Split<'a, Message, Start, End, Theme>
+where
+    Message: 'a,
+    Theme: Catalog + 'a,
+{
+    start: Start,
+    end: End,
+    info: SplitInfo,
     class: Theme::Class<'a>,
     on_drag: Option<Box<dyn Fn(f32) -> Message + 'a>>,
     on_drag_start: Option<Box<dyn Fn() -> Message + 'a>>,
@@ -112,13 +116,15 @@ where
         Self {
             start,
             end,
-            split_at,
-            strategy: Strategy::default(),
-            direction: Direction::default(),
-            handle_width: 11.0,
-            spacing: 0.0,
-            duration: Duration::from_millis(100),
-            delay: Duration::from_millis(100),
+            info: SplitInfo {
+                split_at,
+                strategy: Strategy::default(),
+                direction: Direction::default(),
+                handle_width: 11.0,
+                spacing: 0.0,
+                duration: Duration::from_millis(100),
+                delay: Duration::from_millis(100),
+            },
             class: Theme::default(),
             on_drag: None,
             on_drag_start: None,
@@ -254,42 +260,42 @@ where
     /// Sets the [`Direction`] of the [`Split`].
     #[must_use]
     pub fn direction(mut self, direction: Direction) -> Self {
-        self.direction = direction;
+        self.info.direction = direction;
         self
     }
 
     /// Sets the [`Strategy`] of the [`Split`].
     #[must_use]
     pub fn strategy(mut self, strategy: Strategy) -> Self {
-        self.strategy = strategy;
+        self.info.strategy = strategy;
         self
     }
 
     /// Sets the width of the [`Split`]'s handle.
     #[must_use]
     pub fn handle_width(mut self, handle_width: impl Into<Pixels>) -> Self {
-        self.handle_width = handle_width.into().0;
+        self.info.handle_width = handle_width.into().0;
         self
     }
 
     /// Sets the spacing between the [`Split`]'s handle and content.
     #[must_use]
     pub fn spacing(mut self, spacing: impl Into<Pixels>) -> Self {
-        self.spacing = spacing.into().0;
+        self.info.spacing = spacing.into().0;
         self
     }
 
     /// Sets the duration of the [`Split`]'s focus and unfocus transitions.
     #[must_use]
     pub fn focus_duration(mut self, duration: Duration) -> Self {
-        self.duration = duration;
+        self.info.duration = duration;
         self
     }
 
     /// Sets the delay of the [`Split`]'s focus and unfocus transitions.
     #[must_use]
     pub fn focus_delay(mut self, delay: Duration) -> Self {
-        self.delay = delay;
+        self.info.delay = delay;
         self
     }
 
@@ -309,30 +315,25 @@ where
         self.class = class.into();
         self
     }
+}
 
-    fn hovering(&self, bounds: Rectangle, cursor: Cursor, state: &State) -> Status {
-        let cross_direction = self.direction.select(bounds.width, bounds.height).0;
+#[derive(Default)]
+struct Update {
+    capture: bool,
+    request_redraw: bool,
+    action: Action,
+}
 
-        let layout = state.start_layout + self.spacing;
-        let (x, y) = self.direction.select(0.0, layout);
-        let (x, y) = (x + bounds.x, y + bounds.y);
-        let (width, height) = self.direction.select(cross_direction, self.handle_width);
-
-        if cursor.is_over(Rectangle {
-            x,
-            y,
-            width,
-            height,
-        }) {
-            Status::Hovering
-        } else {
-            Status::Idle
-        }
-    }
-
-    fn focused(&self, state: &State) -> bool {
-        self.on_drag.is_some() && state.status != Status::Idle
-    }
+#[derive(Default)]
+enum Action {
+    Drag {
+        split_at: f32,
+        started: bool,
+    },
+    DragEnd,
+    DoubleClick,
+    #[default]
+    None,
 }
 
 #[derive(PartialEq)]
@@ -355,22 +356,199 @@ struct State {
 }
 
 impl State {
-    fn new(duration: Duration, delay: Duration) -> Self {
+    fn new(info: &SplitInfo) -> Self {
         Self {
             status: Status::Idle,
             last_click: None,
             start_layout: 0.0,
-            mix: Animation::new(false).duration(duration).delay(delay),
+            mix: Animation::new(false)
+                .duration(info.duration)
+                .delay(info.delay),
             now: Instant::now(),
-            duration,
-            delay,
+            duration: info.duration,
+            delay: info.delay,
         }
     }
 
-    fn diff(&mut self, duration: Duration, delay: Duration) {
-        if self.duration != duration || self.delay != delay {
-            self.mix = self.mix.clone().delay(delay).duration(duration);
+    fn diff(&mut self, info: &SplitInfo) {
+        if self.duration != info.duration || self.delay != info.delay {
+            self.mix = self.mix.clone().duration(info.duration).delay(info.delay);
         }
+    }
+
+    fn hovering(&self, bounds: Rectangle, cursor: Cursor, info: &SplitInfo) -> Status {
+        let cross_direction = info.direction.select(bounds.width, bounds.height).0;
+
+        let layout = self.start_layout + info.spacing;
+        let (x, y) = info.direction.select(0.0, layout);
+        let (x, y) = (x + bounds.x, y + bounds.y);
+        let (width, height) = info.direction.select(cross_direction, info.handle_width);
+
+        if cursor.is_over(Rectangle {
+            x,
+            y,
+            width,
+            height,
+        }) {
+            Status::Hovering
+        } else {
+            Status::Idle
+        }
+    }
+
+    fn update(
+        &mut self,
+        event: &Event,
+        bounds: Rectangle,
+        cursor: Cursor,
+        is_event_captured: bool,
+        info: &SplitInfo,
+        draggable: bool,
+    ) -> Update {
+        let mut update = Update::default();
+
+        if let Event::Window(window::Event::RedrawRequested(now)) = event {
+            self.now = *now;
+
+            self.mix
+                .go_mut(draggable && self.status != Status::Idle, self.now);
+            update.request_redraw = self.mix.is_animating(self.now);
+
+            return update;
+        }
+
+        if !draggable || is_event_captured {
+            return update;
+        }
+
+        if let Event::Mouse(event) = event {
+            match event {
+                mouse::Event::ButtonPressed(mouse::Button::Left)
+                    if self.status == Status::Hovering =>
+                {
+                    self.last_click = cursor
+                        .position()
+                        .map(|position| Click::new(position, mouse::Button::Left, self.last_click));
+
+                    self.status = self
+                        .last_click
+                        .filter(|click| click.kind() == Kind::Double)
+                        .map_or(Status::Grabbed, |_| Status::DoubleClicked);
+
+                    update.capture = true;
+                }
+                mouse::Event::CursorMoved {
+                    position: Point { x, y },
+                } => match self.status {
+                    Status::Dragging | Status::Grabbed | Status::DoubleClicked => {
+                        let layout_direction = info.direction.select(bounds.width, bounds.height).1;
+                        let split_at = info.direction.select(x - bounds.x, y - bounds.y).1;
+
+                        let separation = 2.0 * info.spacing + info.handle_width;
+                        let split_at = match info.strategy {
+                            Strategy::Relative => split_at / layout_direction,
+                            Strategy::Start => split_at - separation / 2.0,
+                            Strategy::End => layout_direction - split_at - separation / 2.0,
+                        };
+
+                        if split_at != info.split_at {
+                            let started = self.status != Status::Dragging;
+                            self.status = Status::Dragging;
+
+                            update.action = Action::Drag { split_at, started };
+                            update.capture = true;
+                        }
+                    }
+                    _ => {
+                        let focused = self.status != Status::Idle;
+                        self.status = self.hovering(bounds, cursor, info);
+                        update.request_redraw = (self.status != Status::Idle) != focused;
+                    }
+                },
+                mouse::Event::ButtonReleased(mouse::Button::Left) => match self.status {
+                    Status::Dragging => {
+                        let focused = self.status != Status::Idle;
+                        self.status = self.hovering(bounds, cursor, info);
+                        update.request_redraw = (self.status != Status::Idle) != focused;
+                        update.action = Action::DragEnd;
+                    }
+                    Status::Grabbed => self.status = Status::Hovering,
+                    Status::DoubleClicked => {
+                        self.status = Status::Hovering;
+                        update.action = Action::DoubleClick;
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
+
+        update
+    }
+
+    fn separator(
+        &self,
+        style: &Style,
+        bounds: Rectangle,
+        hint_factor: Option<f32>,
+        info: &SplitInfo,
+    ) -> (Quad, Color) {
+        let color = self
+            .mix
+            .interpolate(style.unfocused.color, style.focused.color, self.now);
+
+        let width = self
+            .mix
+            .interpolate(style.unfocused.width, style.focused.width, self.now);
+
+        let radius = Radius {
+            top_left: self.mix.interpolate(
+                style.unfocused.radius.top_left,
+                style.focused.radius.top_left,
+                self.now,
+            ),
+            top_right: self.mix.interpolate(
+                style.unfocused.radius.top_right,
+                style.focused.radius.top_right,
+                self.now,
+            ),
+            bottom_right: self.mix.interpolate(
+                style.unfocused.radius.bottom_right,
+                style.focused.radius.bottom_right,
+                self.now,
+            ),
+            bottom_left: self.mix.interpolate(
+                style.unfocused.radius.bottom_left,
+                style.focused.radius.bottom_left,
+                self.now,
+            ),
+        };
+
+        let cross_direction = info.direction.select(bounds.width, bounds.height).0;
+        let layout = self.start_layout + info.spacing + (info.handle_width - width) / 2.0;
+        let (x, y) = info.direction.select(0.0, layout);
+        let (x, y) = (x + bounds.x, y + bounds.y);
+        let (width, height) = info.direction.select(cross_direction, width);
+        let (width, height) = if style.snap {
+            let unit = 1.0 / hint_factor.unwrap_or(1.0);
+            (width.max(unit), height.max(unit))
+        } else {
+            (width, height)
+        };
+
+        let quad = Quad {
+            bounds: Rectangle {
+                x,
+                y,
+                width,
+                height,
+            },
+            border: border::rounded(radius),
+            snap: style.snap,
+            ..Quad::default()
+        };
+
+        (quad, color)
     }
 }
 
@@ -399,13 +577,11 @@ where
     }
 
     fn state(&self) -> tree::State {
-        tree::State::new(State::new(self.duration, self.delay))
+        tree::State::new(State::new(&self.info))
     }
 
     fn diff(&mut self, tree: &mut Tree) {
-        tree.state
-            .downcast_mut::<State>()
-            .diff(self.duration, self.delay);
+        tree.state.downcast_mut::<State>().diff(&self.info);
 
         match tree.children.len() {
             0 => tree
@@ -420,8 +596,7 @@ where
     }
 
     fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) {
-        let start_size = self.start.size();
-        let start_min = match self.direction.select(start_size.width, start_size.height).1 {
+        let min = |size: Size<Length>| match self.info.direction.select(size.width, size.height).1 {
             Length::Fixed(min)
             | Length::Bounded {
                 bounds: Bounds::Min(min) | Bounds::Both { min, .. },
@@ -431,46 +606,44 @@ where
             _ => 0.0,
         };
 
-        let end_size = self.end.size();
-        let end_min = match self.direction.select(end_size.width, end_size.height).1 {
-            Length::Fixed(min)
-            | Length::Bounded {
-                bounds: Bounds::Min(min) | Bounds::Both { min, .. },
-                ..
-            }
-            | Length::Fluid(Constraint::Min(min)) => min,
-            _ => 0.0,
-        };
+        let start_min = min(self.start.size());
+        let end_min = min(self.end.size());
 
-        let (cross_direction, layout_direction) =
-            self.direction.select(limits.max.width, limits.max.height);
+        let (cross_direction, layout_direction) = self
+            .info
+            .direction
+            .select(limits.max.width, limits.max.height);
 
-        let separation = 2.0 * self.spacing + self.handle_width;
+        let separation = 2.0 * self.info.spacing + self.info.handle_width;
         let state = tree.state.downcast_mut::<State>();
-        state.start_layout = match self.strategy {
-            Strategy::Relative => layout_direction * self.split_at - separation / 2.0,
-            Strategy::Start => self.split_at,
-            Strategy::End => layout_direction - self.split_at - separation,
+        state.start_layout = match self.info.strategy {
+            Strategy::Relative => layout_direction * self.info.split_at - separation / 2.0,
+            Strategy::Start => self.info.split_at,
+            Strategy::End => layout_direction - self.info.split_at - separation,
         }
         .min(layout_direction - separation - end_min)
         .max(start_min);
 
-        let (start_width, start_height) =
-            self.direction.select(cross_direction, state.start_layout);
+        let (start_width, start_height) = self
+            .info
+            .direction
+            .select(cross_direction, state.start_layout);
         let start_limits = Limits::new(Size::ZERO, Size::new(start_width, start_height));
 
         self.start
             .layout(&mut tree.children[0], renderer, &start_limits);
 
         let end_layout = layout_direction - state.start_layout - separation;
-        let (end_width, end_height) = self.direction.select(cross_direction, end_layout);
+        let (end_width, end_height) = self.info.direction.select(cross_direction, end_layout);
         let end_limits = Limits::new(Size::ZERO, Size::new(end_width, end_height));
 
         self.end
             .layout(&mut tree.children[1], renderer, &end_limits);
 
-        let (offset_width, offset_height) =
-            self.direction.select(0.0, state.start_layout + separation);
+        let (offset_width, offset_height) = self
+            .info
+            .direction
+            .select(0.0, state.start_layout + separation);
 
         tree.children[0].translation = Vector::ZERO;
         tree.children[1].translation = Vector::new(offset_width, offset_height);
@@ -502,103 +675,46 @@ where
                 .update(tree, event, layout, cursor, renderer, shell, viewport);
         }
 
-        let state = tree.state.downcast_mut::<State>();
+        let update = tree.state.downcast_mut::<State>().update(
+            event,
+            layout.bounds(),
+            cursor,
+            shell.is_event_captured(),
+            &self.info,
+            self.on_drag.is_some(),
+        );
 
-        if let Event::Window(window::Event::RedrawRequested(now)) = event {
-            state.now = *now;
+        match update.action {
+            Action::Drag { split_at, started } => {
+                if started && let Some(on_drag_start) = &self.on_drag_start {
+                    shell.publish(on_drag_start());
+                }
 
-            state.mix.go_mut(self.focused(state), state.now);
-            if state.mix.is_animating(state.now) {
-                shell.request_redraw();
+                if let Some(on_drag) = &self.on_drag {
+                    shell.publish(on_drag(split_at));
+                }
             }
-
-            return;
-        }
-
-        if shell.is_event_captured() {
-            return;
-        }
-
-        let bounds = layout.bounds();
-
-        if let Event::Mouse(event) = event {
-            match event {
-                mouse::Event::ButtonPressed(mouse::Button::Left) if self.focused(state) => {
-                    state.last_click = cursor.position().map(|position| {
-                        Click::new(position, mouse::Button::Left, state.last_click)
-                    });
-
-                    state.status = state
-                        .last_click
-                        .filter(|click| click.kind() == Kind::Double)
-                        .map_or(Status::Grabbed, |_| Status::DoubleClicked);
-
+            Action::DragEnd => {
+                if let Some(on_drag_end) = &self.on_drag_end {
+                    shell.publish(on_drag_end());
                     shell.capture_event();
                 }
-                mouse::Event::CursorMoved {
-                    position: Point { x, y },
-                } => {
-                    if let Some(on_drag) = &self.on_drag
-                        && matches!(
-                            state.status,
-                            Status::Dragging | Status::Grabbed | Status::DoubleClicked
-                        )
-                    {
-                        let layout_direction = self.direction.select(bounds.width, bounds.height).1;
-                        let split_at = self.direction.select(x - bounds.x, y - bounds.y).1;
-
-                        let separation = 2.0 * self.spacing + self.handle_width;
-                        let split_at = match self.strategy {
-                            Strategy::Relative => split_at / layout_direction,
-                            Strategy::Start => split_at - separation / 2.0,
-                            Strategy::End => layout_direction - split_at - separation / 2.0,
-                        };
-
-                        if split_at != self.split_at {
-                            if state.status != Status::Dragging {
-                                state.status = Status::Dragging;
-                                if let Some(on_drag_start) = &self.on_drag_start {
-                                    shell.publish(on_drag_start());
-                                }
-                            }
-
-                            shell.publish(on_drag(split_at));
-                            shell.capture_event();
-                        }
-                    } else {
-                        let focused = self.focused(state);
-                        state.status = self.hovering(bounds, cursor, state);
-                        if self.focused(state) != focused {
-                            shell.request_redraw();
-                        }
-                    }
-                }
-                mouse::Event::ButtonReleased(mouse::Button::Left) => match state.status {
-                    Status::Dragging => {
-                        if let Some(on_drag_end) = &self.on_drag_end {
-                            shell.publish(on_drag_end());
-                            shell.capture_event();
-                        }
-
-                        let focused = self.focused(state);
-                        state.status = self.hovering(bounds, cursor, state);
-                        if self.focused(state) != focused {
-                            shell.request_redraw();
-                        }
-                    }
-                    Status::DoubleClicked => {
-                        if let Some(on_double_click) = &self.on_double_click {
-                            shell.publish(on_double_click());
-                            shell.capture_event();
-                        }
-
-                        state.status = Status::Hovering;
-                    }
-                    Status::Grabbed => state.status = Status::Hovering,
-                    _ => {}
-                },
-                _ => {}
             }
+            Action::DoubleClick => {
+                if let Some(on_double_click) = &self.on_double_click {
+                    shell.publish(on_double_click());
+                    shell.capture_event();
+                }
+            }
+            Action::None => {}
+        }
+
+        if update.capture {
+            shell.capture_event();
+        }
+
+        if update.request_redraw {
+            shell.request_redraw();
         }
     }
 
@@ -626,67 +742,14 @@ where
                 .draw(tree, renderer, theme, style, layout, cursor, viewport);
         }
 
-        let style = theme.style(&self.class);
-        let state = tree.state.downcast_ref::<State>();
-
-        let color = state
-            .mix
-            .interpolate(style.unfocused.color, style.focused.color, state.now);
-
-        let width = state
-            .mix
-            .interpolate(style.unfocused.width, style.focused.width, state.now);
-
-        let radius = Radius {
-            top_left: state.mix.interpolate(
-                style.unfocused.radius.top_left,
-                style.focused.radius.top_left,
-                state.now,
-            ),
-            top_right: state.mix.interpolate(
-                style.unfocused.radius.top_right,
-                style.focused.radius.top_right,
-                state.now,
-            ),
-            bottom_right: state.mix.interpolate(
-                style.unfocused.radius.bottom_right,
-                style.focused.radius.bottom_right,
-                state.now,
-            ),
-            bottom_left: state.mix.interpolate(
-                style.unfocused.radius.bottom_left,
-                style.focused.radius.bottom_left,
-                state.now,
-            ),
-        };
-
-        let bounds = layout.bounds();
-        let cross_direction = self.direction.select(bounds.width, bounds.height).0;
-        let layout = state.start_layout + self.spacing + (self.handle_width - width) / 2.0;
-        let (x, y) = self.direction.select(0.0, layout);
-        let (x, y) = (x + bounds.x, y + bounds.y);
-        let (width, height) = self.direction.select(cross_direction, width);
-        let (width, height) = if style.snap {
-            let unit = 1.0 / renderer.hint_factor().unwrap_or(1.0);
-            (width.max(unit), height.max(unit))
-        } else {
-            (width, height)
-        };
-
-        renderer.fill_quad(
-            Quad {
-                bounds: Rectangle {
-                    x,
-                    y,
-                    width,
-                    height,
-                },
-                border: border::rounded(radius),
-                snap: style.snap,
-                ..Quad::default()
-            },
-            color,
+        let (quad, color) = tree.state.downcast_ref::<State>().separator(
+            &theme.style(&self.class),
+            layout.bounds(),
+            renderer.hint_factor(),
+            &self.info,
         );
+
+        renderer.fill_quad(quad, color);
     }
 
     fn mouse_interaction(
@@ -697,14 +760,7 @@ where
         viewport: &Rectangle,
         renderer: &Renderer,
     ) -> Interaction {
-        let state = tree.state.downcast_ref::<State>();
-
-        if self.focused(state) {
-            match self.direction {
-                Direction::Horizontal => Interaction::ResizingRow,
-                Direction::Vertical => Interaction::ResizingColumn,
-            }
-        } else {
+        if tree.state.downcast_ref::<State>().status == Status::Idle {
             let mut iter = layout.iter(&tree.children);
 
             let mut mouse_interaction = {
@@ -720,6 +776,11 @@ where
             });
 
             mouse_interaction
+        } else {
+            match self.info.direction {
+                Direction::Horizontal => Interaction::ResizingRow,
+                Direction::Vertical => Interaction::ResizingColumn,
+            }
         }
     }
 
